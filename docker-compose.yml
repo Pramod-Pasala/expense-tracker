@@ -1,0 +1,12 @@
+services:
+  expense-tracker:
+    container_name: expense-tracker
+    build: .
+    ports:
+      - "8084:8084"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=8084
+    env_file:
+      - .env
