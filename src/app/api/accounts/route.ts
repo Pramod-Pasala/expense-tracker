@@ -3,22 +3,24 @@ import { getDriveClient } from "@/lib/session";
 import { readFile, writeFile } from "@/lib/drive";
 import type { AccountsFile } from "@/lib/schema";
 import { validateAccountsFile } from "@/lib/schema";
+import { getErrorMessage } from "@/lib/format";
 import { v4 as uuidv4 } from "uuid";
 
 export async function GET(req: NextRequest) {
   try {
     const drive = await getDriveClient(req);
-    const raw = await readFile<any>(drive, "accounts.json");
+    const raw = await readFile<unknown>(drive, "accounts.json");
     if (!raw) {
       return NextResponse.json({ schema_version: 1, updated_at: new Date().toISOString(), accounts: [] });
     }
     const data = validateAccountsFile(raw);
     return NextResponse.json(data);
-  } catch (error: any) {
-    if (error.message === "Not authenticated") {
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    if (message === "Not authenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -28,7 +30,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     // Read existing accounts
-    const raw = await readFile<any>(drive, "accounts.json");
+    const raw = await readFile<unknown>(drive, "accounts.json");
     const data: AccountsFile = raw
       ? validateAccountsFile(raw)
       : { schema_version: 1, updated_at: new Date().toISOString(), accounts: [] };
@@ -52,10 +54,11 @@ export async function POST(req: NextRequest) {
     await writeFile(drive, "accounts.json", data);
 
     return NextResponse.json(newAccount, { status: 201 });
-  } catch (error: any) {
-    if (error.message === "Not authenticated") {
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    if (message === "Not authenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

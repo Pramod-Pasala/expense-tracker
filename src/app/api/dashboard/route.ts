@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDriveClient, getSettings } from "@/lib/session";
 import { readFile } from "@/lib/drive";
-import type { AccountsFile, TransactionsFile, CategoriesFile } from "@/lib/schema";
 import { validateAccountsFile, validateTransactionsFile, validateCategoriesFile } from "@/lib/schema";
+import { getErrorMessage } from "@/lib/format";
 import { getLatestRate } from "@/lib/exchange";
 
 export async function GET(req: NextRequest) {
@@ -13,9 +13,9 @@ export async function GET(req: NextRequest) {
 
     // Load all data
     const [accountsRaw, txnsRaw, catsRaw] = await Promise.all([
-      readFile<any>(drive, "accounts.json"),
-      readFile<any>(drive, "transactions.json"),
-      readFile<any>(drive, "categories.json"),
+      readFile<unknown>(drive, "accounts.json"),
+      readFile<unknown>(drive, "transactions.json"),
+      readFile<unknown>(drive, "categories.json"),
     ]);
 
     const accounts = accountsRaw ? validateAccountsFile(accountsRaw).accounts : [];
@@ -166,10 +166,11 @@ export async function GET(req: NextRequest) {
       month_expense: parseFloat(monthExpense.toFixed(2)),
       recent_transactions: recent,
     });
-  } catch (error: any) {
-    if (error.message === "Not authenticated") {
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    if (message === "Not authenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -15,6 +15,24 @@ import {
 } from "@/lib/types";
 
 /* -------------------------------------------------------------------------- */
+/*  getErrorMessage() — safe string extraction from unknown errors             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Safely extract a human-readable message from a value caught as `unknown`.
+ *
+ *   getErrorMessage(new Error("boom"))  → "boom"
+ *   getErrorMessage("oops")             → "oops"
+ *   getErrorException({ code: 500 })    → "[object Object]"
+ *
+ * Use this in `catch (e: unknown)` blocks instead of reaching for `e.message`,
+ * which is not type-safe when the caught value is `unknown`.
+ */
+export function getErrorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+/* -------------------------------------------------------------------------- */
 /*  cn() — classname merger                                                   */
 /* -------------------------------------------------------------------------- */
 

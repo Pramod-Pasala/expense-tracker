@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { cn, formatCurrency } from "@/lib/format";
+import { cn, formatCurrency, getErrorMessage } from "@/lib/format";
 import {
-  Button,
   EmptyState,
   Label,
   LoadingState,
@@ -19,7 +18,6 @@ import {
   type CashflowDatum,
   type CategoryDatum,
 } from "@/components/reports/charts";
-import { formatMonth } from "@/components/reports/format";
 
 /* -------------------------------------------------------------------------- */
 /*  Types                                                                      */
@@ -128,9 +126,9 @@ export default function ReportsPage() {
         }
         const json: ReportData = await res.json();
         if (!cancelled) setData(json);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
-          setError(err.message || "Failed to load report");
+          setError(getErrorMessage(err) || "Failed to load report");
           setData(null);
         }
       } finally {

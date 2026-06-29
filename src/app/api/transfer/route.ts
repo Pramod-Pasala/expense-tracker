@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDriveClient } from "@/lib/session";
 import { readFile, writeFile } from "@/lib/drive";
-import type { TransactionsFile, Transaction } from "@/lib/schema";
-import { validateTransactionsFile } from "@/lib/schema";
+import type { TransactionsFile, Transaction, AccountsFile } from "@/lib/schema";
+import { validateTransactionsFile, validateAccountsFile } from "@/lib/schema";
+import { getErrorMessage } from "@/lib/format";
 import { getLatestRate, getHistoricalRate } from "@/lib/exchange";
 import { v4 as uuidv4 } from "uuid";
 
@@ -56,8 +57,8 @@ export async function GET(req: NextRequest) {
       source: "frankfurter",
       date: rateResponse.date,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -94,13 +95,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch accounts to get currencies
-    const accountsRaw = await readFile<any>(drive, "accounts.json");
+    const accountsRaw = await readFile<AccountsFile>(drive, "accounts.json");
     if (!accountsRaw) {
       return NextResponse.json({ error: "No accounts found" }, { status: 400 });
     }
+    const accountsFile = validateAccountsFile(accountsRaw);
 
     // Read transactions file
-    const raw = await readFile<any>(drive, "transactions.json");
+    const raw = await readFile<unknown>(drive, "transactions.json");
     const data: TransactionsFile = raw
       ? validateTransactionsFile(raw)
       : {
@@ -120,11 +122,11 @@ export async function POST(req: NextRequest) {
     // If same currency, rate is 1
     // If different currency and no manual rate provided, fetch from Frankfurter
     // Determine if currencies differ by checking accounts
-    const fromAccount = accountsRaw.accounts?.find(
-      (a: any) => a.id === from_account_id
+    const fromAccount = accountsFile.accounts.find(
+      (a) => a.id === from_account_id
     );
-    const toAccount = accountsRaw.accounts?.find(
-      (a: any) => a.id === to_account_id
+    const toAccount = accountsFile.accounts.find(
+      (a) => a.id === to_account_id
     );
 
     if (!fromAccount || !toAccount) {
@@ -147,9 +149,9 @@ export async function POST(req: NextRequest) {
         rateSource = "frankfurter";
         rateDate = rateResponse.date;
         convertedAmount = amount * finalRate;
-      } catch (err: any) {
+      } catch (err: unknown) {
         return NextResponse.json(
-          { error: `Failed to fetch exchange rate: ${err.message}` },
+          { error: `Failed to fetch exchange rate: ${getErrorMessage(err)}` },
           { status: 500 }
         );
       }
@@ -188,10 +190,11 @@ export async function POST(req: NextRequest) {
     await writeFile(drive, "transactions.json", data);
 
     return NextResponse.json(newTxn, { status: 201 });
-  } catch (error: any) {
-    if (error.message === "Not authenticated") {
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    if (message === "Not authenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

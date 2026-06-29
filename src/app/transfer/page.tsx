@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { Account, Transaction } from "@/lib/types";
-import { cn, formatCurrency } from "@/lib/format";
+import { formatCurrency, getErrorMessage } from "@/lib/format";
 import {
   Button,
   EmptyState,
@@ -123,8 +123,8 @@ export default function TransferPage() {
         const data: AccountsResponse = await res.json();
         if (cancelled) return;
         setAccounts(data.accounts || []);
-      } catch (err: any) {
-        if (!cancelled) setAccountsError(err.message || "Failed to load accounts");
+      } catch (err: unknown) {
+        if (!cancelled) setAccountsError(getErrorMessage(err) || "Failed to load accounts");
       } finally {
         if (!cancelled) setLoadingAccounts(false);
       }
@@ -170,21 +170,24 @@ export default function TransferPage() {
   /*  Auto-fetch exchange rate when currencies differ                          */
   /*  (skipped when custom rate is enabled)                                    */
   /* ------------------------------------------------------------------------ */
+
+  const rateClearSig = `${useCustomRate}|${differentCurrencies}|${parseAmount(amount) > 0}`;
+  const [prevRateClearSig, setPrevRateClearSig] = useState(rateClearSig);
+  if (rateClearSig !== prevRateClearSig) {
+    setPrevRateClearSig(rateClearSig);
+    if (useCustomRate || !differentCurrencies || parseAmount(amount) <= 0) {
+      setRateData(null);
+      setRateError(null);
+    }
+  }
+
   const fetchRateIdRef = useRef(0);
   useEffect(() => {
-    if (useCustomRate) {
-      setRateData(null);
-      setRateError(null);
-      return;
-    }
-    if (!differentCurrencies || !fromCur || !toCur) {
-      setRateData(null);
-      setRateError(null);
+    if (useCustomRate || !differentCurrencies || !fromCur || !toCur) {
       return;
     }
     const amt = parseAmount(amount);
     if (amt <= 0) {
-      setRateData(null);
       return;
     }
 
@@ -211,11 +214,11 @@ export default function TransferPage() {
         if (reqId === fetchRateIdRef.current) {
           setRateData(data);
         }
-      } catch (err: any) {
-        if (err.name === "AbortError") return;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") return;
         if (reqId === fetchRateIdRef.current) {
           setRateData(null);
-          setRateError(err.message || "Failed to fetch exchange rate");
+          setRateError(getErrorMessage(err) || "Failed to fetch exchange rate");
         }
       } finally {
         if (reqId === fetchRateIdRef.current) setRateLoading(false);
@@ -315,8 +318,8 @@ export default function TransferPage() {
           toCur: toCur!,
           different: !!differentCurrencies,
         });
-      } catch (err: any) {
-        setSubmitError(err.message || "Transfer failed");
+      } catch (err: unknown) {
+        setSubmitError(getErrorMessage(err) || "Transfer failed");
       } finally {
         setSubmitting(false);
       }

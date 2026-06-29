@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Account, AccountType, Transaction } from "@/lib/types";
 import { ACCOUNT_TYPES, CURRENCY_INFO } from "@/lib/types";
-import { formatCurrency, cn, accountTypeInfo, computeAccountBalance } from "@/lib/format";
+import { formatCurrency, cn, accountTypeInfo, computeAccountBalance, getErrorMessage } from "@/lib/format";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -73,13 +73,14 @@ function AccountFormModal({
 }) {
   const [values, setValues] = useState<AccountFormValues>(emptyForm);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) {
       setValues(initial ?? emptyForm);
       setError(null);
     }
-  }, [open, initial]);
+  }
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -327,8 +328,10 @@ export default function AccountsPage() {
   const [showArchived, setShowArchived] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    // Note: loading/error reset is handled by callers (the mount effect sets
+    // them in async callbacks; the retry button sets them in its event handler)
+    // so that this function does not synchronously call setState — which would
+    // be flagged when invoked from an effect (react-hooks/set-state-in-effect).
     try {
       const [accRes, txnRes] = await Promise.all([
         fetch("/api/accounts"),
@@ -348,16 +351,50 @@ export default function AccountsPage() {
       const txnData: TransactionsResponse = await txnRes.json();
       setAccounts(accData.accounts ?? []);
       setTransactions(txnData.transactions ?? []);
-    } catch (e: any) {
-      setError(e.message || "Something went wrong.");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || "Something went wrong.");
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Initial load on mount. The setState calls above all run inside async
+  // callbacks (after `await`), so the effect body itself does not call
+  // setState synchronously.
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const [accRes, txnRes] = await Promise.all([
+          fetch("/api/accounts"),
+          fetch("/api/transactions"),
+        ]);
+        if (cancelled) return;
+        if (!accRes.ok) {
+          const body = await accRes.json().catch(() => ({}));
+          throw new Error(body.error || `Failed to load accounts (${accRes.status})`);
+        }
+        if (!txnRes.ok) {
+          const body = await txnRes.json().catch(() => ({}));
+          throw new Error(
+            body.error || `Failed to load transactions (${txnRes.status})`,
+          );
+        }
+        const accData: AccountsResponse = await accRes.json();
+        const txnData: TransactionsResponse = await txnRes.json();
+        if (cancelled) return;
+        setAccounts(accData.accounts ?? []);
+        setTransactions(txnData.transactions ?? []);
+      } catch (e: unknown) {
+        if (!cancelled) setError(getErrorMessage(e) || "Something went wrong.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const balances = useMemo(() => {
     const map = new Map<string, number>();
@@ -419,8 +456,8 @@ export default function AccountsPage() {
       }
       setModalOpen(false);
       setEditing(null);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e));
     } finally {
       setSubmitting(false);
     }
@@ -441,8 +478,8 @@ export default function AccountsPage() {
       setAccounts((prev) =>
         prev.map((a) => (a.id === target.id ? { ...a, archived: true } : a)),
       );
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e));
     }
   };
 
@@ -476,7 +513,15 @@ export default function AccountsPage() {
             title="Something went wrong"
             description={error}
             action={
-              <Button onClick={load}>Try again</Button>
+              <Button
+                onClick={() => {
+                  setLoading(true);
+                  setError(null);
+                  load();
+                }}
+              >
+                Try again
+              </Button>
             }
           />
         </Card>

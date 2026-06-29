@@ -11,7 +11,7 @@ export async function getDriveClient(req: NextRequest) {
 
 export async function getSettings(req: NextRequest): Promise<Settings> {
   const drive = await getDriveClient(req);
-  const raw = await readFile<any>(drive, "settings.json");
+  const raw = await readFile<unknown>(drive, "settings.json");
   if (!raw) {
     const settings = defaultSettings();
     await writeFile(drive, "settings.json", settings);

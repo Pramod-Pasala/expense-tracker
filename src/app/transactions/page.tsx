@@ -8,7 +8,7 @@ import type {
   TransactionType,
 } from "@/lib/types";
 import { CURRENCY_INFO } from "@/lib/types";
-import { formatCurrency, formatDate, cn, todayISO } from "@/lib/format";
+import { formatCurrency, formatDate, cn, todayISO, getErrorMessage } from "@/lib/format";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -118,14 +118,14 @@ function TransactionFormModal({
     emptyTxnForm(accounts[0]?.id ?? ""),
   );
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) {
       setValues(initial ?? emptyTxnForm(accounts[0]?.id ?? ""));
       setError(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initial]);
+  }
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -330,8 +330,9 @@ export default function TransactionsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    // loading/error reset is handled by callers so this function does not
+    // synchronously call setState (which would be flagged when called from an
+    // effect — react-hooks/set-state-in-effect).
     try {
       const [accRes, catRes, txnRes] = await Promise.all([
         fetch("/api/accounts"),
@@ -348,16 +349,46 @@ export default function TransactionsPage() {
       setAccounts(accData.accounts ?? []);
       setCategories(catData.categories ?? []);
       setTransactions(txnData.transactions ?? []);
-    } catch (e: any) {
-      setError(e.message || "Something went wrong.");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || "Something went wrong.");
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Initial load on mount. The setState calls all run inside async callbacks
+  // (after `await`), so the effect body itself does not call setState.
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const [accRes, catRes, txnRes] = await Promise.all([
+          fetch("/api/accounts"),
+          fetch("/api/categories"),
+          fetch("/api/transactions"),
+        ]);
+        if (cancelled) return;
+        if (!accRes.ok) throw new Error("Failed to load accounts");
+        if (!catRes.ok) throw new Error("Failed to load categories");
+        if (!txnRes.ok) throw new Error("Failed to load transactions");
+
+        const accData: AccountsResponse = await accRes.json();
+        const catData: CategoriesResponse = await catRes.json();
+        const txnData: TransactionsResponse = await txnRes.json();
+        if (cancelled) return;
+        setAccounts(accData.accounts ?? []);
+        setCategories(catData.categories ?? []);
+        setTransactions(txnData.transactions ?? []);
+      } catch (e: unknown) {
+        if (!cancelled) setError(getErrorMessage(e) || "Something went wrong.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Lookup maps
   const accountMap = useMemo(
@@ -387,10 +418,12 @@ export default function TransactionsPage() {
     });
   }, [transactions, filterAccount, filterType, filterStart, filterEnd]);
 
-  // Reset visible count when filters change
-  useEffect(() => {
+  const filterSig = `${filterAccount}|${filterType}|${filterStart}|${filterEnd}`;
+  const [prevFilterSig, setPrevFilterSig] = useState(filterSig);
+  if (filterSig !== prevFilterSig) {
+    setPrevFilterSig(filterSig);
     setVisibleCount(PAGE_SIZE);
-  }, [filterAccount, filterType, filterStart, filterEnd]);
+  }
 
   const visible = filtered.slice(0, visibleCount);
   const hasMore = visibleCount < filtered.length;
@@ -457,8 +490,8 @@ export default function TransactionsPage() {
       }
       setModalOpen(false);
       setEditing(null);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e));
     } finally {
       setSubmitting(false);
     }
@@ -477,8 +510,8 @@ export default function TransactionsPage() {
         throw new Error(body.error || "Failed to delete transaction");
       }
       setTransactions((prev) => prev.filter((t) => t.id !== target.id));
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e));
     }
   };
 
@@ -515,7 +548,17 @@ export default function TransactionsPage() {
             icon="⚠️"
             title="Something went wrong"
             description={error}
-            action={<Button onClick={load}>Try again</Button>}
+            action={
+              <Button
+                onClick={() => {
+                  setLoading(true);
+                  setError(null);
+                  load();
+                }}
+              >
+                Try again
+              </Button>
+            }
           />
         </Card>
       )}

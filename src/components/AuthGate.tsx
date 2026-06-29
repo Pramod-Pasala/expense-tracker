@@ -30,14 +30,28 @@ interface AuthState {
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [state, setState] = useState<AuthState>({ status: "checking" });
+  const authError = searchParams.get("auth_error");
+
+  // If the OAuth callback already flagged an auth error, surface it as the
+  // initial state instead of re-entering the consent loop. Computing this in
+  // the useState initializer (rather than synchronously inside an effect)
+  // avoids a cascading render and satisfies react-hooks/set-state-in-effect.
+  const [state, setState] = useState<AuthState>(() =>
+    authError
+      ? { status: "error", error: decodeAuthError(authError) }
+      : { status: "checking" },
+  );
 
   useEffect(() => {
-    const authError = searchParams.get("auth_error");
+    // When an auth error is already shown, skip the network check entirely.
+    if (authError) return;
+
+    let cancelled = false;
 
     async function check() {
       try {
         const res = await fetch("/api/auth/status", { cache: "no-store" });
+        if (cancelled) return;
         if (!res.ok) {
           setState({
             status: "error",
@@ -47,6 +61,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         }
         const data: { authenticated: boolean; email: string | null; needs_consent: boolean } =
           await res.json();
+        if (cancelled) return;
 
         if (data.authenticated) {
           setState({ status: "authenticated", email: data.email });
@@ -68,6 +83,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           error: "Your session could not be identified. Please reload the page.",
         });
       } catch {
+        if (cancelled) return;
         setState({
           status: "error",
           error: "Network error while checking your session. Please try again.",
@@ -75,15 +91,12 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // If the callback already flagged an auth error, show it immediately
-    // instead of re-entering the consent loop.
-    if (authError) {
-      setState({ status: "error", error: decodeAuthError(authError) });
-      return;
-    }
-
     check();
-  }, [searchParams]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authError]);
 
   /* ---- Loading / redirecting ---- */
   if (state.status === "checking" || state.status === "needs_consent") {

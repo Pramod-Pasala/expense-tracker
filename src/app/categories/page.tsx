@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Category, CategoryType } from "@/lib/types";
-import { cn } from "@/lib/format";
+import { cn, getErrorMessage } from "@/lib/format";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -81,13 +81,14 @@ function CategoryFormModal({
 }) {
   const [values, setValues] = useState<CategoryFormValues>(emptyForm);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) {
       setValues(initial ?? emptyForm);
       setError(null);
     }
-  }, [open, initial]);
+  }
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -293,8 +294,9 @@ export default function CategoriesPage() {
   const [showArchived, setShowArchived] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    // loading/error reset is handled by callers so this function does not
+    // synchronously call setState (which would be flagged when called from an
+    // effect — react-hooks/set-state-in-effect).
     try {
       const res = await fetch("/api/categories");
       if (!res.ok) {
@@ -303,16 +305,38 @@ export default function CategoriesPage() {
       }
       const data: CategoriesResponse = await res.json();
       setCategories(data.categories ?? []);
-    } catch (e: any) {
-      setError(e.message || "Something went wrong.");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || "Something went wrong.");
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Initial load on mount. The setState calls all run inside async callbacks
+  // (after `await`), so the effect body itself does not call setState.
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/categories");
+        if (cancelled) return;
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `Failed to load categories (${res.status})`);
+        }
+        const data: CategoriesResponse = await res.json();
+        if (cancelled) return;
+        setCategories(data.categories ?? []);
+      } catch (e: unknown) {
+        if (!cancelled) setError(getErrorMessage(e) || "Something went wrong.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const active = categories.filter((c) => !c.archived);
   const archived = categories.filter((c) => c.archived);
@@ -395,8 +419,8 @@ export default function CategoriesPage() {
       }
       setModalOpen(false);
       setEditing(null);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e));
     } finally {
       setSubmitting(false);
     }
@@ -417,8 +441,8 @@ export default function CategoriesPage() {
       setCategories((prev) =>
         prev.map((c) => (c.id === target.id ? { ...c, archived: true } : c)),
       );
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e));
     }
   };
 
@@ -451,7 +475,17 @@ export default function CategoriesPage() {
             icon="⚠️"
             title="Something went wrong"
             description={error}
-            action={<Button onClick={load}>Try again</Button>}
+            action={
+              <Button
+                onClick={() => {
+                  setLoading(true);
+                  setError(null);
+                  load();
+                }}
+              >
+                Try again
+              </Button>
+            }
           />
         </Card>
       )}
