@@ -70,7 +70,7 @@ EXPOSE 8084
 
 # Healthcheck — poll the /api/health endpoint via wget (busybox-provided)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost:8084/api/health || exit 1
+    CMD wget --quiet --tries=1 --spider http://127.0.0.1:8084/api/health || exit 1
 
 # Run the standalone Next.js server
 CMD ["node", "server.js"]
