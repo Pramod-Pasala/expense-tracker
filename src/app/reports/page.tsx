@@ -34,6 +34,7 @@ interface ReportData {
     total_expense: number;
     net: number;
   };
+  tags: { tag: string; income: number; expense: number; count: number }[];
 }
 
 type Preset = "this_month" | "last_3_months" | "this_year" | "custom";
@@ -334,6 +335,18 @@ export default function ReportsPage() {
               <NoData label="No spending in this range" />
             )}
           </ChartCard>
+
+          {/* Tag analysis */}
+          <ChartCard title="Tag Analysis">
+            {data!.tags.length > 0 ? (
+              <TagAnalysis
+                data={data!.tags}
+                baseCurrency={baseCurrency}
+              />
+            ) : (
+              <NoData label="No tagged transactions in this range" />
+            )}
+          </ChartCard>
         </div>
       )}
     </div>
@@ -491,5 +504,82 @@ function NoData({ label }: { label: string }) {
     <div className="flex h-48 items-center justify-center text-sm text-zinc-400">
       {label}
     </div>
+  );
+}
+
+function TagAnalysis({
+  data,
+  baseCurrency,
+}: {
+  data: { tag: string; income: number; expense: number; count: number }[];
+  baseCurrency: string;
+}) {
+  // Mobile: cards; desktop: table. Data already sorted by expense desc from API.
+  return (
+    <>
+      {/* Desktop table */}
+      <div className="hidden overflow-x-auto sm:block">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-zinc-100 text-left text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+              <th className="px-2 py-2 font-medium">Tag</th>
+              <th className="px-2 py-2 text-right font-medium">Income</th>
+              <th className="px-2 py-2 text-right font-medium">Expense</th>
+              <th className="px-2 py-2 text-right font-medium">Transactions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((d) => (
+              <tr
+                key={d.tag}
+                className="border-b border-zinc-50 last:border-0 dark:border-zinc-800/50"
+              >
+                <td className="whitespace-nowrap px-2 py-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                  #{d.tag}
+                </td>
+                <td className="whitespace-nowrap px-2 py-2 text-right text-sm text-emerald-600 dark:text-emerald-400">
+                  {d.income > 0 ? formatCurrency(d.income, baseCurrency) : "—"}
+                </td>
+                <td className="whitespace-nowrap px-2 py-2 text-right text-sm text-rose-600 dark:text-rose-400">
+                  {d.expense > 0 ? formatCurrency(d.expense, baseCurrency) : "—"}
+                </td>
+                <td className="whitespace-nowrap px-2 py-2 text-right text-sm text-zinc-500 dark:text-zinc-400">
+                  {d.count}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile cards */}
+      <ul className="space-y-2 sm:hidden">
+        {data.map((d) => (
+          <li
+            key={d.tag}
+            className="flex items-center justify-between gap-2 rounded-lg border border-zinc-100 px-3 py-2 dark:border-zinc-800"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                #{d.tag}
+              </p>
+              <p className="text-xs text-zinc-400">{d.count} transactions</p>
+            </div>
+            <div className="text-right text-sm">
+              {d.income > 0 && (
+                <p className="text-emerald-600 dark:text-emerald-400">
+                  +{formatCurrency(d.income, baseCurrency)}
+                </p>
+              )}
+              {d.expense > 0 && (
+                <p className="text-rose-600 dark:text-rose-400">
+                  −{formatCurrency(d.expense, baseCurrency)}
+                </p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

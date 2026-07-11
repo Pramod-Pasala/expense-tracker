@@ -105,6 +105,7 @@ function TransactionFormModal({
   submitting,
   accounts,
   categories,
+  existingTags,
 }: {
   open: boolean;
   onClose: () => void;
@@ -113,6 +114,7 @@ function TransactionFormModal({
   submitting: boolean;
   accounts: Account[];
   categories: Category[];
+  existingTags: string[];
 }) {
   const [values, setValues] = useState<TxnFormValues>(() =>
     emptyTxnForm(accounts[0]?.id ?? ""),
@@ -126,6 +128,53 @@ function TransactionFormModal({
       setError(null);
     }
   }
+
+  // Current tags (already entered) so we can avoid suggesting duplicates.
+  const currentTags = useMemo(
+    () =>
+      values.tags
+        .split(",")
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean),
+    [values.tags],
+  );
+
+  // Determine which fragment the user is currently typing (last comma-separated
+  // segment) so we can filter suggestions by prefix match.
+  const typingFragment = useMemo(() => {
+    const parts = values.tags.split(",");
+    return (parts[parts.length - 1] ?? "").trim().toLowerCase();
+  }, [values.tags]);
+
+  // Suggest tags that are not already in the input. If the user is typing in
+  // the last segment, further filter to those matching that prefix.
+  const suggestions = useMemo(() => {
+    let pool = existingTags.filter(
+      (t) => !currentTags.includes(t.toLowerCase()),
+    );
+    if (typingFragment) {
+      pool = pool.filter((t) => t.toLowerCase().startsWith(typingFragment));
+    }
+    return pool.slice(0, 12);
+  }, [existingTags, currentTags, typingFragment]);
+
+  const addTag = (tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed) return;
+    if (currentTags.includes(trimmed.toLowerCase())) return; // avoid duplicates
+    setValues((v) => {
+      // Replace the last comma-separated fragment (the one the user is typing)
+      // with the selected tag. If there are no existing tags, just set the tag.
+      const parts = v.tags.split(",");
+      const lastIdx = parts.length - 1;
+      parts[lastIdx] = trimmed;
+      // Clean up: drop empty leading parts, trim everything, rejoin
+      const cleaned = parts
+        .map((p) => p.trim())
+        .filter((p, i) => p !== "" || i === 0);
+      return { ...v, tags: cleaned.join(", ") };
+    });
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -263,6 +312,21 @@ function TransactionFormModal({
           value={values.tags}
           onChange={(e) => setValues((v) => ({ ...v, tags: e.target.value }))}
         />
+
+        {suggestions.length > 0 && (
+          <div className="-mt-2 flex flex-wrap gap-1.5">
+            {suggestions.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => addTag(tag)}
+                className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+        )}
 
         {error && <p className="text-sm text-rose-600">{error}</p>}
 
@@ -429,6 +493,18 @@ export default function TransactionsPage() {
   const hasMore = visibleCount < filtered.length;
 
   const activeAccounts = accounts.filter((a) => !a.archived);
+
+  // All distinct tags across loaded transactions, for autocomplete suggestions.
+  const existingTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of transactions) {
+      for (const tag of t.tags ?? []) {
+        const trimmed = tag.trim();
+        if (trimmed) set.add(trimmed);
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [transactions]);
 
   const openAdd = () => {
     setEditing(null);
@@ -859,6 +935,7 @@ export default function TransactionsPage() {
         submitting={submitting}
         accounts={activeAccounts}
         categories={categories.filter((c) => !c.archived)}
+        existingTags={existingTags}
         initial={
           editing
             ? {

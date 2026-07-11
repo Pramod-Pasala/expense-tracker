@@ -132,6 +132,34 @@ export async function GET(req: NextRequest) {
     const totalIncome = cashflow.reduce((sum, c) => sum + c.income, 0);
     const totalExpense = cashflow.reduce((sum, c) => sum + c.expense, 0);
 
+    // 5. Tag analysis (income, expense, count per tag)
+    const tagTotals: Record<string, { income: number; expense: number; count: number }> = {};
+    for (const txn of rangeTxns) {
+      const tags = txn.tags ?? [];
+      for (const tag of tags) {
+        const key = tag.trim();
+        if (!key) continue;
+        if (!tagTotals[key]) {
+          tagTotals[key] = { income: 0, expense: 0, count: 0 };
+        }
+        tagTotals[key].count += 1;
+        if (txn.type === "income") {
+          tagTotals[key].income += toBase(txn.amount, txn.currency);
+        } else if (txn.type === "expense") {
+          tagTotals[key].expense += toBase(txn.amount, txn.currency);
+        }
+      }
+    }
+
+    const tagsAnalysis = Object.entries(tagTotals)
+      .map(([tag, d]) => ({
+        tag,
+        income: parseFloat(d.income.toFixed(2)),
+        expense: parseFloat(d.expense.toFixed(2)),
+        count: d.count,
+      }))
+      .sort((a, b) => b.expense - a.expense);
+
     return NextResponse.json({
       date_range: { start: sDate, end: eDate },
       base_currency: baseCurrency,
@@ -143,6 +171,7 @@ export async function GET(req: NextRequest) {
         total_expense: parseFloat(totalExpense.toFixed(2)),
         net: parseFloat((totalIncome - totalExpense).toFixed(2)),
       },
+      tags: tagsAnalysis,
     });
   } catch (error: unknown) {
     const message = getErrorMessage(error);
