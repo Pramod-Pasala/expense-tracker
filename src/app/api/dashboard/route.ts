@@ -168,8 +168,13 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: unknown) {
     const message = getErrorMessage(error);
+    console.error("[dashboard] Error:", message, error);
     if (message === "Not authenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    // Drive API auth errors (expired token, invalid credentials)
+    if (/invalid authentication credentials|invalid_grant|401|unauthorized/i.test(message)) {
+      return NextResponse.json({ error: "Token expired or invalid. Please reconnect." }, { status: 401 });
     }
     return NextResponse.json({ error: message }, { status: 500 });
   }

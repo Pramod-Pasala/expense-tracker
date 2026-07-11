@@ -33,57 +33,54 @@ export function getTokens(req: NextRequest): { access: string | null; refresh: s
 }
 
 /**
- * Check whether a Google OAuth access token (JWT) is expired or about to expire.
- * Google access tokens are JWTs with an `exp` claim (Unix seconds).
- * We add a 30-second buffer to avoid edge-case races.
- */
-export function isTokenExpired(token: string): boolean {
-  try {
-    const parts = token.split(".");
-    if (parts.length < 2) return true;
-    const payload = JSON.parse(
-      Buffer.from(parts[1], "base64").toString()
-    );
-    if (!payload.exp) return true;
-    // exp is in seconds; Date.now() is in milliseconds
-    return payload.exp * 1000 <= Date.now() + 30_000;
-  } catch {
-    return true; // If we can't decode it, treat as expired
-  }
-}
-
-/**
- * Get a valid (non-expired) access token, refreshing from the refresh token
- * if the current access token has expired. Also updates the cookie so
- * subsequent requests don't need to refresh again.
+ * Get a valid access token, refreshing from the refresh token if needed.
+ *
+ * Google access tokens are opaque strings (NOT JWTs), so we cannot check
+ * expiry locally. Instead, we optimistically use the access token if present,
+ * and only refresh when the Drive API rejects it with a 401.
+ *
+ * This function is called by requireAuth() which wraps API route handlers.
+ * The actual 401-handling and refresh happens in getDriveClientWithRetry().
  */
 export async function getAccessToken(req: NextRequest): Promise<string | null> {
   const { access, refresh } = getTokens(req);
-
-  // Access token still valid — use it directly
-  if (access && !isTokenExpired(access)) {
-    return access;
-  }
-
-  // Access token missing or expired — try refreshing
+  if (access) return access;
   if (refresh) {
     try {
       const refreshed = await refreshAccessToken(refresh);
-      // Update the cookie so subsequent requests use the fresh token
-      try {
-        const cookieStore = await cookies();
-        cookieStore.set(cookieConfig.accessToken, refreshed.access_token, {
-          maxAge: cookieConfig.maxAge,
-          httpOnly: true,
-          secure: googleConfig.redirectUri.startsWith("https://"),
-          sameSite: "lax",
-          path: "/",
-        });
-      } catch {
-        // cookieStore.set() only works in a route handler / server action.
-        // If we're in a context where it doesn't, just return the token
-        // without updating the cookie — the next request will refresh again.
-      }
+      return refreshed.access_token;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Get a valid access token from cookies, refreshing if needed.
+ * Used by the cookies()-based getDriveClient() below.
+ *
+ * Returns the access token, or null if no valid token can be obtained.
+ * Also returns null if the refresh token is invalid (invalid_grant) —
+ * the caller should treat this as "needs re-consent".
+ */
+async function getValidAccessToken(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const access = cookieStore.get(cookieConfig.accessToken)?.value || null;
+  const refresh = cookieStore.get(cookieConfig.refreshToken)?.value || null;
+
+  if (access) return access;
+
+  if (refresh) {
+    try {
+      const refreshed = await refreshAccessToken(refresh);
+      cookieStore.set(cookieConfig.accessToken, refreshed.access_token, {
+        maxAge: cookieConfig.maxAge,
+        httpOnly: true,
+        secure: googleConfig.redirectUri.startsWith("https://"),
+        sameSite: "lax",
+        path: "/",
+      });
       return refreshed.access_token;
     } catch {
       return null;
@@ -181,43 +178,19 @@ export function clearAuthCookies(response: NextResponse) {
 
 /**
  * Build an authenticated Google Drive client from the access token stored in
- * the request cookies. Uses Next.js 16's async `cookies()` API so it can be
- * called from route handlers without explicitly passing the request.
+ * cookies. If the access token is missing, tries to refresh using the stored
+ * refresh token. If both fail, throws "Not authenticated".
  *
- * If the access token has expired, automatically refreshes it using the
- * stored refresh token and updates the cookie.
- *
- * @returns An authenticated `drive_v3.Drive` instance.
- * @throws  {Error} "Not authenticated" if no valid access token is found.
+ * Note: Google access tokens are opaque (not JWTs), so we cannot check expiry
+ * locally. If the token is expired, the Drive API will return 401 and the
+ * error will propagate to the route handler.
  */
 export async function getDriveClient() {
-  const cookieStore = await cookies();
-  const access = cookieStore.get(cookieConfig.accessToken)?.value || null;
-  const refresh = cookieStore.get(cookieConfig.refreshToken)?.value || null;
-
-  // Access token still valid — use it directly
-  if (access && !isTokenExpired(access)) {
-    return createDriveClient(access);
+  const token = await getValidAccessToken();
+  if (!token) {
+    throw new Error("Not authenticated");
   }
-
-  // Access token missing or expired — try refreshing
-  if (refresh) {
-    try {
-      const refreshed = await refreshAccessToken(refresh);
-      cookieStore.set(cookieConfig.accessToken, refreshed.access_token, {
-        maxAge: cookieConfig.maxAge,
-        httpOnly: true,
-        secure: googleConfig.redirectUri.startsWith("https://"),
-        sameSite: "lax",
-        path: "/",
-      });
-      return createDriveClient(refreshed.access_token);
-    } catch {
-      // Fall through to "Not authenticated"
-    }
-  }
-
-  throw new Error("Not authenticated");
+  return createDriveClient(token);
 }
 
 /**

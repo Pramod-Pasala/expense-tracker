@@ -26,18 +26,15 @@ interface AuthState {
  *     looping.
  *  4. Once `authenticated`, render children.
  *
- * CF Access already authenticated the user at the edge; this gate only handles
- * the Google Drive consent layer on top.
+ * CRITICAL: To prevent redirect loops, we track the number of silent login
+ * attempts in sessionStorage. After 1 failed attempt, we skip the silent flow
+ * and show the error/reconnect UI directly.
  */
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const authError = searchParams.get("auth_error");
 
-  // If the OAuth callback already flagged an auth error, surface it as the
-  // initial state instead of re-entering the consent loop. Computing this in
-  // the useState initializer (rather than synchronously inside an effect)
-  // avoids a cascading render and satisfies react-hooks/set-state-in-effect.
   const [state, setState] = useState<AuthState>(() =>
     authError
       ? { status: "error", ...decodeAuthError(authError) }
@@ -66,15 +63,29 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
 
         if (data.authenticated) {
+          // Clear the retry counter on success
+          sessionStorage.removeItem("expense_auth_retries");
           setState({ status: "authenticated", email: data.email });
           return;
         }
 
         if (data.needs_consent) {
+          // Check if we've already tried the silent flow — if so, show error
+          // instead of looping.
+          const retries = parseInt(sessionStorage.getItem("expense_auth_retries") || "0", 10);
+          if (retries >= 1) {
+            sessionStorage.removeItem("expense_auth_retries");
+            setState({
+              status: "error",
+              error: "Google Drive authorization is needed. Please reconnect to continue.",
+              needsReconnect: true,
+            });
+            return;
+          }
+
+          sessionStorage.setItem("expense_auth_retries", String(retries + 1));
           setState({ status: "needs_consent", email: data.email });
-          // Kick off the silent OAuth flow. The login route redirects to Google
-          // with prompt=none; the callback either sets cookies and sends the
-          // user back here, or returns with ?auth_error=… on a hard failure.
+          // Kick off the silent OAuth flow.
           window.location.href = "/api/auth/login";
           return;
         }
@@ -142,6 +153,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => {
+                sessionStorage.removeItem("expense_auth_retries");
                 // Force consent flow so user re-grants Drive access
                 window.location.href = "/api/auth/login?force_consent=true";
               }}
@@ -153,9 +165,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => {
-                // Clear the auth_error param and retry the consent flow.
+                sessionStorage.removeItem("expense_auth_retries");
                 router.replace("/");
-                // Hard reload to retrigger the effect after the param is gone.
                 setTimeout(() => window.location.reload(), 50);
               }}
               className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
@@ -177,12 +188,12 @@ function decodeAuthError(code: string): { error: string; needsReconnect?: boolea
   switch (code) {
     case "no_code":
       return { error: "Google did not return an authorization code. Please try again." };
-    case "token_exchange":
+    case "token_exchange_failed":
       return { error: "We couldn't complete the sign-in with Google. Please try again." };
-    case "no_refresh_token":
-      return { error: "Google didn't grant a refresh token. You may need to revoke access in your Google account and try again." };
+    case "no_access_token":
+      return { error: "Google didn't return an access token. Please try again." };
     case "consent_required":
-      return { error: "Google Drive access needs your explicit consent. Click try again to approve." };
+      return { error: "Google Drive access needs your explicit consent. Click reconnect to approve.", needsReconnect: true };
     case "invalid_grant":
       return {
         error: "Your Google Drive authorization has expired or been revoked. Please reconnect to continue.",
