@@ -103,6 +103,19 @@ function isTransferTxn(txn: Transaction | null): boolean {
   return !!txn && txn.type === "transfer";
 }
 
+/** Check if the editing target is an auto-generated transfer fee expense. */
+function isTransferFeeTxn(txn: Transaction | null): boolean {
+  return !!txn && txn.type === "expense" && txn.tags.includes("TransferFee");
+}
+
+/** Find the parent transfer transaction for a fee expense. */
+function findParentTransfer(txn: Transaction | null, all: Transaction[]): Transaction | null {
+  if (!txn || !isTransferFeeTxn(txn)) return null;
+  return all.find(
+    (t) => t.type === "transfer" && t.date === txn.date && t.account_id === txn.account_id,
+  ) ?? null;
+}
+
 /** Build the edit URL for a transfer transaction. */
 function transferEditUrl(txn: Transaction | null): string {
   return txn ? `/transfer?edit=${txn.id}` : "/transfer";
@@ -118,7 +131,9 @@ function TransactionFormModal({
   categories,
   existingTags,
   isTransfer,
+  isTransferFee,
   editing,
+  parentTransfer,
 }: {
   open: boolean;
   onClose: () => void;
@@ -128,11 +143,14 @@ function TransactionFormModal({
   accounts: Account[];
   categories: Category[];
   existingTags: string[];
-  /** When true, the transaction being edited is a transfer — show a notice
-   *  instead of the expense/income form (transfers are edited elsewhere). */
+  /** When true, the transaction being edited is a transfer — show a notice. */
   isTransfer?: boolean;
+  /** When true, the transaction is a read-only transfer fee expense. */
+  isTransferFee?: boolean;
   /** The transaction being edited (for building edit links). */
   editing: Transaction | null;
+  /** Parent transfer if editing a fee expense. */
+  parentTransfer: Transaction | null;
 }) {
   const [values, setValues] = useState<TxnFormValues>(() =>
     emptyTxnForm(accounts[0]?.id ?? ""),
@@ -236,6 +254,33 @@ function TransactionFormModal({
           >
             Edit this transfer →
           </Link>
+        </div>
+      ) : isTransferFee ? (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            <p className="font-medium">
+              This is a transfer fee.
+            </p>
+            <p className="mt-1">
+              Transfer fees are automatically generated when you create a transfer with a fee.
+              To change the fee amount, edit the transfer it belongs to.
+            </p>
+          </div>
+          {parentTransfer ? (
+            <Link
+              href={transferEditUrl(parentTransfer)}
+              className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+            >
+              Edit the transfer →
+            </Link>
+          ) : (
+            <Link
+              href="/transfer"
+              className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+            >
+              Go to Transfer page →
+            </Link>
+          )}
         </div>
       ) : (
       <form onSubmit={submit} className="space-y-4">
@@ -620,12 +665,14 @@ export default function TransactionsPage() {
       const res = await fetch(`/api/transactions/${target.id}`, {
         method: "DELETE",
       });
-      if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
+      if (checkAuthExpired(res)) return;
         if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || "Failed to delete transaction");
       }
-      setTransactions((prev) => prev.filter((t) => t.id !== target.id));
+      const result = await res.json().catch(() => ({}));
+      const deletedIds = new Set(result.deleted || [target.id]);
+      setTransactions((prev) => prev.filter((t) => !deletedIds.has(t.id)));
     } catch (e: unknown) {
       setError(getErrorMessage(e));
     }
@@ -977,7 +1024,9 @@ export default function TransactionsPage() {
         categories={categories.filter((c) => !c.archived)}
         existingTags={existingTags}
         isTransfer={isTransferTxn(editing)}
+        isTransferFee={isTransferFeeTxn(editing)}
         editing={editing}
+        parentTransfer={findParentTransfer(editing, transactions)}
         initial={
           editing
             ? {

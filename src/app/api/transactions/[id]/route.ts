@@ -60,18 +60,56 @@ export async function DELETE(
     }
     const data: TransactionsFile = validateTransactionsFile(raw);
 
-    const idx = data.transactions.findIndex((t) => t.id === id);
-    if (idx === -1) {
+    const txn = data.transactions.find((t) => t.id === id);
+    if (!txn) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
 
-    // Hard delete for transactions (they can be recreated, and archived
-    // transactions would skew balance calculations)
-    data.transactions.splice(idx, 1);
+    const idsToDelete = new Set<string>([id]);
+
+    // Cascade: if deleting a transfer, also delete its fee expense
+    if (txn.type === "transfer") {
+      for (const t of data.transactions) {
+        if (
+          t.type === "expense" &&
+          t.tags.includes("TransferFee") &&
+          t.date === txn.date &&
+          t.account_id === txn.account_id
+        ) {
+          idsToDelete.add(t.id);
+        }
+      }
+    }
+
+    // Cascade: if deleting a fee expense, also delete its parent transfer
+    if (txn.type === "expense" && txn.tags.includes("TransferFee")) {
+      for (const t of data.transactions) {
+        if (
+          t.type === "transfer" &&
+          t.date === txn.date &&
+          t.account_id === txn.account_id
+        ) {
+          // Also delete any other fee expenses for this transfer
+          idsToDelete.add(t.id);
+          for (const f of data.transactions) {
+            if (
+              f.type === "expense" &&
+              f.tags.includes("TransferFee") &&
+              f.date === t.date &&
+              f.account_id === t.account_id
+            ) {
+              idsToDelete.add(f.id);
+            }
+          }
+        }
+      }
+    }
+
+    data.transactions = data.transactions.filter((t) => !idsToDelete.has(t.id));
     data.updated_at = new Date().toISOString();
     await writeFile(drive, "transactions.json", data);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, deleted: Array.from(idsToDelete) });
   } catch (error: unknown) {
     const message = getErrorMessage(error);
     if (message === "Not authenticated") {

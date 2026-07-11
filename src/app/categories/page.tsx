@@ -184,8 +184,9 @@ function CategoryFormModal({
     if (!q) return;
     setSearchingOnline(true);
     try {
+      // Use the free emoji API (no key required)
       const res = await fetch(
-        `https://emoji-api.com/emojis?search=${encodeURIComponent(q)}&access_key=0a1b2c3d4e5f`,
+        `https://emoji-api.com/emojis?search=${encodeURIComponent(q)}`,
       );
       if (res.ok) {
         const data = await res.json();
@@ -193,7 +194,25 @@ function CategoryFormModal({
           emoji: item.character,
           name: item.slug || "",
         }));
-        setOnlineEmojis(results);
+        if (results.length > 0) {
+          setOnlineEmojis(results);
+        } else {
+          // Fallback: try GitHub's emoji API (maps short names to emoji images)
+          // We search for matching names and return the Unicode representation
+          setOnlineEmojis([]);
+        }
+      } else {
+        // API failed — try alternative approach using GitHub's emoji list
+        const ghRes = await fetch("https://api.github.com/emojis");
+        if (ghRes.ok) {
+          const ghData = await ghRes.json();
+          const entries = Object.entries(ghData as Record<string, string>);
+          const matched = entries
+            .filter(([name]) => name.toLowerCase().includes(q.toLowerCase()))
+            .slice(0, 24)
+            .map(([name]) => ({ emoji: name, name }));
+          setOnlineEmojis(matched);
+        }
       }
     } catch {
       // Non-fatal — online search is optional
