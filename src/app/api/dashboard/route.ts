@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDriveClient, getSettings } from "@/lib/session";
 import { readFile } from "@/lib/drive";
 import { validateAccountsFile, validateTransactionsFile, validateCategoriesFile } from "@/lib/schema";
-import { getErrorMessage } from "@/lib/format";
+import { getErrorMessage, isDriveAuthError } from "@/lib/format";
 import { getLatestRate } from "@/lib/exchange";
 
 export async function GET(req: NextRequest) {
@@ -173,7 +173,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
     // Drive API auth errors (expired token, invalid credentials)
-    if (/invalid authentication credentials|invalid_grant|401|unauthorized/i.test(message)) {
+    if (isDriveAuthError(message)) {
       return NextResponse.json({ error: "Token expired or invalid. Please reconnect." }, { status: 401 });
     }
     return NextResponse.json({ error: message }, { status: 500 });

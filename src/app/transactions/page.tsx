@@ -9,7 +9,7 @@ import type {
   TransactionType,
 } from "@/lib/types";
 import { CURRENCY_INFO } from "@/lib/types";
-import { formatCurrency, formatDate, cn, todayISO, getErrorMessage } from "@/lib/format";
+import { formatCurrency, formatDate, cn, todayISO, getErrorMessage, checkAuthExpired} from "@/lib/format";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -575,6 +575,7 @@ export default function TransactionsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+        if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || "Failed to update transaction");
@@ -589,6 +590,7 @@ export default function TransactionsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+        if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || "Failed to create transaction");
@@ -618,7 +620,8 @@ export default function TransactionsPage() {
       const res = await fetch(`/api/transactions/${target.id}`, {
         method: "DELETE",
       });
-      if (!res.ok) {
+      if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
+        if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || "Failed to delete transaction");
       }

@@ -32,6 +32,28 @@ export function getErrorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/**
+ * Check if an error is a Google Drive auth error (expired/invalid token).
+ * Used by API routes to return 401 instead of 500, so the frontend
+ * can auto-redirect to the re-login flow.
+ */
+export function isDriveAuthError(message: string): boolean {
+  return /invalid authentication credentials|invalid_grant|401|unauthorized/i.test(message);
+}
+
+/**
+ * Check if a fetch response is a 401 (auth expired) and redirect to re-login.
+ * Call this after every API fetch in client components.
+ * Returns true if the response was a 401 (caller should bail out).
+ */
+export function checkAuthExpired(res: Response): boolean {
+  if (res.status === 401) {
+    window.location.href = "/api/auth/login?force_consent=true";
+    return true;
+  }
+  return false;
+}
+
 /* -------------------------------------------------------------------------- */
 /*  cn() — classname merger                                                   */
 /* -------------------------------------------------------------------------- */

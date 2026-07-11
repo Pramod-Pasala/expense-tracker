@@ -3,7 +3,7 @@ import { getDriveClient } from "@/lib/session";
 import { readFile, writeFile } from "@/lib/drive";
 import type { CategoriesFile, Category } from "@/lib/schema";
 import { validateCategoriesFile, defaultCategories } from "@/lib/schema";
-import { getErrorMessage } from "@/lib/format";
+import { getErrorMessage, isDriveAuthError} from "@/lib/format";
 import { v4 as uuidv4 } from "uuid";
 
 export async function GET(req: NextRequest) {
@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
     const message = getErrorMessage(error);
     if (message === "Not authenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    if (isDriveAuthError(message)) {
+      return NextResponse.json({ error: "Token expired or invalid. Please reconnect." }, { status: 401 });
     }
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -66,6 +69,9 @@ export async function POST(req: NextRequest) {
     const message = getErrorMessage(error);
     if (message === "Not authenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    if (isDriveAuthError(message)) {
+      return NextResponse.json({ error: "Token expired or invalid. Please reconnect." }, { status: 401 });
     }
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Category, CategoryType } from "@/lib/types";
-import { cn, getErrorMessage } from "@/lib/format";
+import { cn, getErrorMessage, checkAuthExpired} from "@/lib/format";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -157,21 +157,50 @@ function CategoryFormModal({
   const [values, setValues] = useState<CategoryFormValues>(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [prevOpen, setPrevOpen] = useState(open);
-  const [iconSearch, setIconSearch] = useState("");
+  const [onlineEmojis, setOnlineEmojis] = useState<{ emoji: string; name: string }[]>([]);
+  const [searchingOnline, setSearchingOnline] = useState(false);
   if (open !== prevOpen) {
     setPrevOpen(open);
     if (open) {
       setValues(initial ?? emptyForm);
       setError(null);
-      setIconSearch("");
+      setOnlineEmojis([]);
     }
   }
 
+  // Filter preset emojis based on the category name being typed
   const filteredEmojis = useMemo(() => {
-    const q = iconSearch.trim().toLowerCase();
+    const q = values.name.trim().toLowerCase();
     if (!q) return CATEGORY_EMOJIS;
-    return CATEGORY_EMOJIS.filter((item) => item.name.includes(q));
-  }, [iconSearch]);
+    const words = q.split(/\s+/);
+    return CATEGORY_EMOJIS.filter((item) =>
+      words.some((w) => item.name.includes(w)),
+    );
+  }, [values.name]);
+
+  // Search for emojis online using the category name
+  const searchOnlineEmojis = async () => {
+    const q = values.name.trim();
+    if (!q) return;
+    setSearchingOnline(true);
+    try {
+      const res = await fetch(
+        `https://emoji-api.com/emojis?search=${encodeURIComponent(q)}&access_key=0a1b2c3d4e5f`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const results = (Array.isArray(data) ? data : []).slice(0, 24).map((item: { character: string; slug: string }) => ({
+          emoji: item.character,
+          name: item.slug || "",
+        }));
+        setOnlineEmojis(results);
+      }
+    } catch {
+      // Non-fatal — online search is optional
+    } finally {
+      setSearchingOnline(false);
+    }
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,14 +228,49 @@ function CategoryFormModal({
         />
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-gray-700">Icon</label>
-          <input
-            type="text"
-            placeholder="Search icons…"
-            value={iconSearch}
-            onChange={(e) => setIconSearch(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-          />
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-gray-700">Icon</label>
+            <button
+              type="button"
+              onClick={searchOnlineEmojis}
+              disabled={!values.name.trim() || searchingOnline}
+              className="text-xs font-medium text-emerald-600 hover:text-emerald-700 disabled:text-gray-300"
+            >
+              {searchingOnline ? "Searching…" : "Search online"}
+            </button>
+          </div>
+
+          {/* Online search results */}
+          {onlineEmojis.length > 0 && (
+            <>
+              <p className="text-xs text-gray-400">From the web:</p>
+              <div className="flex flex-wrap items-center gap-2">
+                {onlineEmojis.map((item) => (
+                  <button
+                    key={item.emoji + item.name}
+                    type="button"
+                    title={item.name}
+                    onClick={() => setValues((v) => ({ ...v, icon: item.emoji }))}
+                    className={cn(
+                      "flex h-9 w-9 items-center justify-center rounded-lg border-2 text-lg transition-transform hover:scale-110",
+                      values.icon === item.emoji
+                        ? "border-gray-900 ring-2 ring-offset-2"
+                        : "border-transparent bg-gray-50",
+                    )}
+                    aria-label={`Select icon ${item.name}`}
+                  >
+                    {item.emoji}
+                  </button>
+                ))}
+              </div>
+              <div className="h-px bg-gray-100 my-1" />
+            </>
+          )}
+
+          {/* Preset emojis filtered by category name */}
+          <p className="text-xs text-gray-400">
+            {values.name.trim() ? `Matching "${values.name.trim()}"` : "All icons"}
+          </p>
           <div className="flex flex-wrap items-center gap-2 max-h-40 overflow-y-auto">
             {filteredEmojis.map((item) => (
               <button
@@ -226,7 +290,7 @@ function CategoryFormModal({
               </button>
             ))}
             {filteredEmojis.length === 0 && (
-              <span className="text-xs text-gray-400">No matching icons</span>
+              <span className="text-xs text-gray-400">No matching icons — try searching online</span>
             )}
             <input
               type="text"
@@ -423,7 +487,8 @@ export default function CategoriesPage() {
     // effect — react-hooks/set-state-in-effect).
     try {
       const res = await fetch("/api/categories");
-      if (!res.ok) {
+      if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
+        if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Failed to load categories (${res.status})`);
       }
@@ -444,6 +509,7 @@ export default function CategoriesPage() {
       try {
         const res = await fetch("/api/categories");
         if (cancelled) return;
+        if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || `Failed to load categories (${res.status})`);
@@ -521,6 +587,7 @@ export default function CategoriesPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+        if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || "Failed to update category");
@@ -535,6 +602,7 @@ export default function CategoriesPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+        if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || "Failed to create category");
@@ -559,7 +627,8 @@ export default function CategoriesPage() {
       const res = await fetch(`/api/categories/${target.id}`, {
         method: "DELETE",
       });
-      if (!res.ok) {
+      if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
+        if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || "Failed to archive category");
       }

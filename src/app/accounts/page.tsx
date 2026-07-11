@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Account, AccountType, Transaction } from "@/lib/types";
 import { ACCOUNT_TYPES, CURRENCY_INFO } from "@/lib/types";
-import { formatCurrency, cn, accountTypeInfo, computeAccountBalance, getErrorMessage } from "@/lib/format";
+import { formatCurrency, cn, accountTypeInfo, computeAccountBalance, getErrorMessage, checkAuthExpired} from "@/lib/format";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -335,11 +335,11 @@ export default function AccountsPage() {
         fetch("/api/accounts"),
         fetch("/api/transactions"),
       ]);
-      if (!accRes.ok) {
+      if (checkAuthExpired(accRes)) return; if (!accRes.ok) {
         const body = await accRes.json().catch(() => ({}));
         throw new Error(body.error || `Failed to load accounts (${accRes.status})`);
       }
-      if (!txnRes.ok) {
+      if (checkAuthExpired(txnRes)) return; if (!txnRes.ok) {
         const body = await txnRes.json().catch(() => ({}));
         throw new Error(
           body.error || `Failed to load transactions (${txnRes.status})`,
@@ -368,11 +368,11 @@ export default function AccountsPage() {
           fetch("/api/transactions"),
         ]);
         if (cancelled) return;
-        if (!accRes.ok) {
+        if (checkAuthExpired(accRes)) return; if (!accRes.ok) {
           const body = await accRes.json().catch(() => ({}));
           throw new Error(body.error || `Failed to load accounts (${accRes.status})`);
         }
-        if (!txnRes.ok) {
+        if (checkAuthExpired(txnRes)) return; if (!txnRes.ok) {
           const body = await txnRes.json().catch(() => ({}));
           throw new Error(
             body.error || `Failed to load transactions (${txnRes.status})`,
@@ -431,6 +431,7 @@ export default function AccountsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+        if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || "Failed to update account");
@@ -445,6 +446,7 @@ export default function AccountsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+        if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || "Failed to create account");
@@ -469,7 +471,8 @@ export default function AccountsPage() {
       const res = await fetch(`/api/accounts/${target.id}`, {
         method: "DELETE",
       });
-      if (!res.ok) {
+      if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
+        if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || "Failed to archive account");
       }

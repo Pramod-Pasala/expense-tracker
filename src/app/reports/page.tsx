@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { cn, formatCurrency, getErrorMessage } from "@/lib/format";
+import { cn, formatCurrency, getErrorMessage, checkAuthExpired} from "@/lib/format";
 import {
   EmptyState,
   Label,
@@ -121,6 +121,7 @@ export default function ReportsPage() {
           end_date: endDate,
         });
         const res = await fetch(`/api/reports?${params.toString()}`);
+        if (checkAuthExpired(res)) return; if (checkAuthExpired(res)) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || `Failed to load report (${res.status})`);
