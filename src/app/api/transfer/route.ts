@@ -186,10 +186,42 @@ export async function POST(req: NextRequest) {
     };
 
     data.transactions.push(newTxn);
+
+    // If there's a transfer fee, auto-create an expense transaction
+    let feeTxn: Transaction | null = null;
+    if (transfer_fee && transfer_fee > 0) {
+      feeTxn = {
+        id: uuidv4(),
+        type: "expense",
+        amount: transfer_fee,
+        currency: fromAccount.currency,
+        account_id: from_account_id,
+        category_id: null,
+        date: transferDate,
+        notes: `Transfer fee: ${fromAccount.name} → ${toAccount.name} (${amount} ${fromAccount.currency})`,
+        tags: ["TransferFee"],
+        created_at: now,
+        updated_at: now,
+        transfer_to_account_id: null,
+        transfer_from_amount: null,
+        transfer_to_amount: null,
+        exchange_rate: null,
+        exchange_rate_source: null,
+        exchange_rate_date: null,
+        transfer_fee: null,
+        transfer_fee_account_id: null,
+        metadata: {},
+      };
+      data.transactions.push(feeTxn);
+    }
+
     data.updated_at = now;
     await writeFile(drive, "transactions.json", data);
 
-    return NextResponse.json(newTxn, { status: 201 });
+    return NextResponse.json(
+      { transfer: newTxn, fee_expense: feeTxn },
+      { status: 201 },
+    );
   } catch (error: unknown) {
     const message = getErrorMessage(error);
     if (message === "Not authenticated") {

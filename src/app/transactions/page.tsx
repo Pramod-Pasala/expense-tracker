@@ -98,6 +98,11 @@ function emptyTxnForm(defaultAccount: string): TxnFormValues {
   };
 }
 
+/** Check if the editing target is a transfer transaction. */
+function isTransferTxn(txn: Transaction | null): boolean {
+  return !!txn && txn.type === "transfer";
+}
+
 function TransactionFormModal({
   open,
   onClose,
@@ -961,6 +966,7 @@ export default function TransactionsPage() {
         accounts={activeAccounts}
         categories={categories.filter((c) => !c.archived)}
         existingTags={existingTags}
+        isTransfer={isTransferTxn(editing)}
         initial={
           editing
             ? {
