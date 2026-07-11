@@ -65,16 +65,28 @@ export async function DELETE(
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
 
-    // Prevent direct deletion of transfer fee expenses
+    // Prevent direct deletion of transfer fee expenses — UNLESS the parent
+    // transfer no longer exists (orphaned fee from before metadata linking).
     if (txn.type === "expense" && txn.tags.includes("TransferFee")) {
       const parentId = txn.metadata?.parent_transfer_id as string | undefined;
-      return NextResponse.json(
-        {
-          error: "This is a transfer fee. Delete the parent transfer instead.",
-          parent_transfer_id: parentId,
-        },
-        { status: 400 },
-      );
+      const parentExists = parentId
+        ? data.transactions.some((t) => t.id === parentId)
+        : // No parent_transfer_id in metadata (old fee) — check if any transfer
+          // with same date+account still exists
+          data.transactions.some(
+            (t) => t.type === "transfer" && t.date === txn.date && t.account_id === txn.account_id,
+          );
+
+      if (parentExists) {
+        return NextResponse.json(
+          {
+            error: "This is a transfer fee. Delete the parent transfer instead.",
+            parent_transfer_id: parentId,
+          },
+          { status: 400 },
+        );
+      }
+      // Parent doesn't exist — allow deletion of the orphaned fee
     }
 
     const idsToDelete = new Set<string>([id]);
