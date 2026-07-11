@@ -186,7 +186,7 @@ function CategoryFormModal({
     try {
       // Use the free emoji API (no key required)
       const res = await fetch(
-        `https://emoji-api.com/emojis?search=${encodeURIComponent(q)}`,
+        `https://emoji-api.com/emojis?search=${encodeURIComponent(q)}&access_key=6095330eee1772a25d5c2355b2dadfe6ec7860ef`,
       );
       if (res.ok) {
         const data = await res.json();
