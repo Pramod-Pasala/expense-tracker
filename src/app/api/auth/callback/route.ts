@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildAuthUrl, setAuthCookies, googleConfig } from "@//lib/auth";
+import { buildAuthUrl, setAuthCookies, googleConfig } from "@/lib/auth";
 
-/** Build an absolute redirect URL from a path, using the request's origin. */
-function absoluteRedirect(req: NextRequest, path: string): NextResponse {
-  const url = req.nextUrl.clone();
-  url.pathname = path.split("?")[0];
-  url.search = "";
-  // Re-append query string if present
-  const qIndex = path.indexOf("?");
-  if (qIndex >= 0) {
-    url.search = path.slice(qIndex);
-  }
+/** Build an absolute redirect URL using the app's external origin from OAUTH_REDIRECT_URI. */
+function appRedirect(path: string): NextResponse {
+  // googleConfig.redirectUri is e.g. "https://expenses.pramod-pasala.tech/api/auth/callback"
+  // Extract the origin from it so redirects always use the public domain, not 0.0.0.0:8084.
+  const origin = new URL(googleConfig.redirectUri).origin;
+  const url = new URL(path, origin);
   return NextResponse.redirect(url);
 }
 
@@ -23,13 +19,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL(buildAuthUrl(req, "consent")));
   }
   if (error === "access_denied") {
-    return absoluteRedirect(req, "/?auth_error=denied");
+    return appRedirect("/?auth_error=denied");
   }
   if (error) {
-    return absoluteRedirect(req, "/?auth_error=" + encodeURIComponent(error));
+    return appRedirect("/?auth_error=" + encodeURIComponent(error));
   }
   if (!code) {
-    return absoluteRedirect(req, "/?auth_error=no_code");
+    return appRedirect("/?auth_error=no_code");
   }
 
   // Exchange code for tokens
@@ -50,7 +46,7 @@ export async function GET(req: NextRequest) {
   if (!resp.ok) {
     const errorDetail = await resp.json().catch(() => ({}));
     const msg = errorDetail.error || "token_exchange_failed";
-    return absoluteRedirect(req, "/?auth_error=" + encodeURIComponent(msg));
+    return appRedirect("/?auth_error=" + encodeURIComponent(msg));
   }
 
   const tokenData = await resp.json();
@@ -58,14 +54,10 @@ export async function GET(req: NextRequest) {
   const refreshToken = tokenData.refresh_token;
 
   if (!accessToken) {
-    return absoluteRedirect(req, "/?auth_error=no_access_token");
+    return appRedirect("/?auth_error=no_access_token");
   }
 
-  // Build absolute URL for success redirect
-  const redirectUrl = req.nextUrl.clone();
-  redirectUrl.pathname = "/";
-  redirectUrl.search = "";
-  const redirect = NextResponse.redirect(redirectUrl, 303);
+  const redirect = appRedirect("/");
   setAuthCookies(redirect, accessToken, refreshToken);
   return redirect;
 }

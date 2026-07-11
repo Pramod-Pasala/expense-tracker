@@ -37,7 +37,7 @@ export function getTokens(req: NextRequest): { access: string | null; refresh: s
  * Google access tokens are JWTs with an `exp` claim (Unix seconds).
  * We add a 30-second buffer to avoid edge-case races.
  */
-function isTokenExpired(token: string): boolean {
+export function isTokenExpired(token: string): boolean {
   try {
     const parts = token.split(".");
     if (parts.length < 2) return true;

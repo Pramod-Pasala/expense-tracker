@@ -46,7 +46,7 @@ interface DashboardData {
 
 type LoadState =
   | { status: "loading" }
-  | { status: "error"; message: string }
+  | { status: "error"; message: string; needsReconnect?: boolean }
   | { status: "ok"; data: DashboardData }
   | { status: "empty"; data: DashboardData };
 
@@ -59,13 +59,25 @@ export default function DashboardPage() {
       try {
         const res = await fetch("/api/dashboard", { cache: "no-store" });
         if (res.status === 401) {
-          // AuthGate should normally catch this, but guard anyway.
-          if (!cancelled) setState({ status: "error", message: "Your session has expired. Please reload." });
+          // Token expired or missing — redirect to re-login flow.
+          if (!cancelled) {
+            window.location.href = "/api/auth/login?force_consent=true";
+          }
           return;
         }
         if (!res.ok) {
+          // Try to extract the actual error message from the response body.
+          let detail = `HTTP ${res.status}`;
+          try {
+            const body = await res.json();
+            detail = body.error || detail;
+          } catch {
+            /* response body wasn't JSON */
+          }
+          // If the error mentions auth/token, offer reconnect.
+          const needsReconnect = /auth|token|credential|grant/i.test(detail);
           if (!cancelled)
-            setState({ status: "error", message: `Failed to load dashboard (HTTP ${res.status}).` });
+            setState({ status: "error", message: `Failed to load dashboard (${detail}).`, needsReconnect });
           return;
         }
         const data: DashboardData = await res.json();
@@ -97,13 +109,25 @@ export default function DashboardPage() {
           title="Couldn't load your dashboard"
           description={state.message}
           action={
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700"
-            >
-              Retry
-            </button>
+            state.needsReconnect ? (
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = "/api/auth/login?force_consent=true";
+                }}
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700"
+              >
+                Reconnect Google Drive
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700"
+              >
+                Retry
+              </button>
+            )
           }
         />
       </Card>
