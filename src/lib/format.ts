@@ -143,7 +143,7 @@ function getDateFormatter(format: DateFormat): Intl.DateTimeFormat {
   if (!fmt) {
     const opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "2-digit", day: "2-digit" };
     fmt = new Intl.DateTimeFormat(
-      format === "MM/DD/YYYY" ? "en-US" : format === "YYYY-MM-DD" ? "sv-SE" : "en-GB",
+      format === "MM/DD/YYYY" ? "en-US" : format === "YYYY-MM-DD" ? "sv-SE" : "de-DE",
       opts
     );
     dateFormatterCache.set(format, fmt);
