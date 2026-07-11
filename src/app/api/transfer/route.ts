@@ -230,3 +230,162 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+// PUT to update an existing transfer transaction
+export async function PUT(req: NextRequest) {
+  try {
+    const drive = await getDriveClient(req);
+    const body = await req.json();
+    const {
+      id,
+      from_account_id,
+      to_account_id,
+      amount,
+      date,
+      exchange_rate,
+      exchange_rate_source,
+      transfer_fee,
+      notes,
+      tags,
+    } = body;
+
+    if (!id || !from_account_id || !to_account_id || !amount) {
+      return NextResponse.json(
+        { error: "id, from_account_id, to_account_id, and amount are required" },
+        { status: 400 },
+      );
+    }
+
+    if (from_account_id === to_account_id) {
+      return NextResponse.json(
+        { error: "Source and destination accounts must be different" },
+        { status: 400 },
+      );
+    }
+
+    // Fetch accounts to get currencies
+    const accountsRaw = await readFile<AccountsFile>(drive, "accounts.json");
+    if (!accountsRaw) {
+      return NextResponse.json({ error: "No accounts found" }, { status: 400 });
+    }
+    const accountsFile = validateAccountsFile(accountsRaw);
+
+    // Read transactions file
+    const raw = await readFile<unknown>(drive, "transactions.json");
+    if (!raw) {
+      return NextResponse.json({ error: "No transactions found" }, { status: 404 });
+    }
+    const data: TransactionsFile = validateTransactionsFile(raw);
+
+    const existing = data.transactions.find((t) => t.id === id);
+    if (!existing) {
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
+    }
+
+    const fromAccount = accountsFile.accounts.find((a) => a.id === from_account_id);
+    const toAccount = accountsFile.accounts.find((a) => a.id === to_account_id);
+    if (!fromAccount || !toAccount) {
+      return NextResponse.json({ error: "Account not found" }, { status: 400 });
+    }
+
+    const now = new Date().toISOString();
+    const transferDate = date || now.split("T")[0];
+    const sameCurrency = fromAccount.currency === toAccount.currency;
+
+    let finalRate = exchange_rate;
+    let rateSource = exchange_rate_source || "manual";
+    let rateDate = transferDate;
+    let convertedAmount = amount;
+
+    if (sameCurrency) {
+      finalRate = 1;
+      rateSource = "identity";
+      convertedAmount = amount;
+    } else if (!finalRate) {
+      try {
+        const rateResponse = transferDate === now.split("T")[0]
+          ? await getLatestRate(fromAccount.currency, toAccount.currency)
+          : await getHistoricalRate(transferDate, fromAccount.currency, toAccount.currency);
+        finalRate = rateResponse.rates[toAccount.currency];
+        rateSource = "frankfurter";
+        rateDate = rateResponse.date;
+        convertedAmount = amount * finalRate;
+      } catch (err: unknown) {
+        return NextResponse.json(
+          { error: `Failed to fetch exchange rate: ${getErrorMessage(err)}` },
+          { status: 500 },
+        );
+      }
+    } else {
+      convertedAmount = amount * finalRate;
+    }
+
+    // Update the existing transfer transaction
+    existing.amount = amount;
+    existing.currency = fromAccount.currency;
+    existing.account_id = from_account_id;
+    existing.date = transferDate;
+    existing.notes = notes || "";
+    existing.tags = tags || [];
+    existing.updated_at = now;
+    existing.transfer_to_account_id = to_account_id;
+    existing.transfer_from_amount = amount;
+    existing.transfer_to_amount = convertedAmount;
+    existing.exchange_rate = finalRate;
+    existing.exchange_rate_source = rateSource as "frankfurter" | "manual" | null;
+    existing.exchange_rate_date = rateDate;
+    existing.transfer_fee = transfer_fee || null;
+    existing.transfer_fee_account_id = transfer_fee ? from_account_id : null;
+
+    // Handle fee expense: find old fee txn, delete it, create new one if needed
+    const oldFeeTxn = data.transactions.find(
+      (t) => t.type === "expense" && t.tags.includes("TransferFee") &&
+        t.date === existing.date && t.account_id === from_account_id &&
+        t.notes.includes(fromAccount.name) && t.notes.includes(toAccount.name),
+    );
+    if (oldFeeTxn) {
+      data.transactions = data.transactions.filter((t) => t.id !== oldFeeTxn.id);
+    }
+
+    let feeTxn: Transaction | null = null;
+    if (transfer_fee && transfer_fee > 0) {
+      feeTxn = {
+        id: oldFeeTxn?.id || uuidv4(),
+        type: "expense",
+        amount: transfer_fee,
+        currency: fromAccount.currency,
+        account_id: from_account_id,
+        category_id: null,
+        date: transferDate,
+        notes: `Transfer fee: ${fromAccount.name} → ${toAccount.name} (${amount} ${fromAccount.currency})`,
+        tags: ["TransferFee"],
+        created_at: oldFeeTxn?.created_at || now,
+        updated_at: now,
+        transfer_to_account_id: null,
+        transfer_from_amount: null,
+        transfer_to_amount: null,
+        exchange_rate: null,
+        exchange_rate_source: null,
+        exchange_rate_date: null,
+        transfer_fee: null,
+        transfer_fee_account_id: null,
+        metadata: {},
+      };
+      data.transactions.push(feeTxn);
+    }
+
+    data.updated_at = now;
+    await writeFile(drive, "transactions.json", data);
+
+    return NextResponse.json(
+      { transfer: existing, fee_expense: feeTxn },
+      { status: 200 },
+    );
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    if (message === "Not authenticated") {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

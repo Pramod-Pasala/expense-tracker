@@ -103,6 +103,11 @@ function isTransferTxn(txn: Transaction | null): boolean {
   return !!txn && txn.type === "transfer";
 }
 
+/** Build the edit URL for a transfer transaction. */
+function transferEditUrl(txn: Transaction | null): string {
+  return txn ? `/transfer?edit=${txn.id}` : "/transfer";
+}
+
 function TransactionFormModal({
   open,
   onClose,
@@ -113,6 +118,7 @@ function TransactionFormModal({
   categories,
   existingTags,
   isTransfer,
+  editing,
 }: {
   open: boolean;
   onClose: () => void;
@@ -125,6 +131,8 @@ function TransactionFormModal({
   /** When true, the transaction being edited is a transfer — show a notice
    *  instead of the expense/income form (transfers are edited elsewhere). */
   isTransfer?: boolean;
+  /** The transaction being edited (for building edit links). */
+  editing: Transaction | null;
 }) {
   const [values, setValues] = useState<TxnFormValues>(() =>
     emptyTxnForm(accounts[0]?.id ?? ""),
@@ -219,15 +227,14 @@ function TransactionFormModal({
               This is a transfer transaction.
             </p>
             <p className="mt-1">
-              Transfer transactions can&apos;t be edited here. Please use the
-              Transfer page to make changes.
+              Transfer transactions are edited on the Transfer page. Click below to edit this transfer.
             </p>
           </div>
           <Link
-            href="/transfer"
+            href={transferEditUrl(editing)}
             className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
           >
-            Go to Transfer page →
+            Edit this transfer →
           </Link>
         </div>
       ) : (
@@ -967,6 +974,7 @@ export default function TransactionsPage() {
         categories={categories.filter((c) => !c.archived)}
         existingTags={existingTags}
         isTransfer={isTransferTxn(editing)}
+        editing={editing}
         initial={
           editing
             ? {

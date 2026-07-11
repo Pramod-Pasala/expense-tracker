@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import type { Account, Transaction } from "@/lib/types";
 import { formatCurrency, getErrorMessage } from "@/lib/format";
@@ -72,11 +72,16 @@ function formatRate(rate: number): string {
 
 export default function TransferPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
 
   // --- data state ----------------------------------------------------------
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [accountsError, setAccountsError] = useState<string | null>(null);
+
+  // --- edit state ----------------------------------------------------------
+  const [editingTxn, setEditingTxn] = useState<Transaction | null>(null);
 
   // --- form state ----------------------------------------------------------
   const [fromAccountId, setFromAccountId] = useState("");
@@ -166,6 +171,36 @@ export default function TransferPage() {
         // non-fatal
       }
     })();
+
+    // If editing, load the transaction
+    if (editId) {
+      (async () => {
+        try {
+          const res = await fetch("/api/transactions");
+          if (!res.ok) return;
+          const data: RecentTransfersResponse = await res.json();
+          if (cancelled) return;
+          const txn = (data.transactions || []).find((t) => t.id === editId);
+          if (txn && txn.type === "transfer") {
+            setEditingTxn(txn);
+            setFromAccountId(txn.account_id);
+            setToAccountId(txn.transfer_to_account_id || "");
+            setAmount(String(txn.amount));
+            setDate(txn.date);
+            setNotes(txn.notes);
+            setTagsInput(txn.tags.join(", "));
+            if (txn.transfer_fee) setTransferFee(String(txn.transfer_fee));
+            if (txn.exchange_rate && txn.exchange_rate !== 1) {
+              setUseCustomRate(true);
+              // Custom rate is stored as from→to, but UI shows 1 toCur = ? fromCur
+              setCustomRate(txn.exchange_rate ? String(1 / txn.exchange_rate) : "");
+            }
+          }
+        } catch {
+          // non-fatal
+        }
+      })();
+    }
 
     return () => {
       cancelled = true;
@@ -321,8 +356,6 @@ export default function TransferPage() {
         }
         if (differentCurrencies) {
           if (useCustomRate) {
-            // Custom rate is entered as "1 toCur = X fromCur".
-            // API expects from→to rate, so invert it.
             const customR = parseAmount(customRate);
             body.exchange_rate = customR > 0 ? 1 / customR : 0;
             body.exchange_rate_source = "manual";
@@ -332,8 +365,13 @@ export default function TransferPage() {
           }
         }
 
-        const res = await fetch("/api/transfer", {
-          method: "POST",
+        const url = "/api/transfer";
+        const method = editingTxn ? "PUT" : "POST";
+        if (editingTxn) {
+          body.id = editingTxn.id;
+        }
+        const res = await fetch(url, {
+          method,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
@@ -376,6 +414,7 @@ export default function TransferPage() {
 
   const resetForm = useCallback(() => {
     setSuccess(null);
+    setEditingTxn(null);
     setFromAccountId("");
     setToAccountId("");
     setAmount("");
@@ -387,7 +426,11 @@ export default function TransferPage() {
     setDate(today());
     setRateData(null);
     setSubmitError(null);
-  }, []);
+    // Clear edit param from URL
+    if (editId) {
+      router.replace("/transfer");
+    }
+  }, [editId, router]);
 
   /* ------------------------------------------------------------------------ */
   /*  Render — success state                                                   */
@@ -452,7 +495,7 @@ export default function TransferPage() {
               View transactions
             </Button>
             <Button variant="secondary" onClick={resetForm} className="sm:flex-1">
-              New transfer
+              {editingTxn ? "Done" : "New transfer"}
             </Button>
           </div>
         </div>
@@ -466,8 +509,8 @@ export default function TransferPage() {
   return (
     <div>
       <PageHeader
-        title="Transfer Money"
-        description="Move funds between accounts — with live exchange rates for currency conversion."
+        title={editingTxn ? "Edit Transfer" : "Transfer Money"}
+        description={editingTxn ? "Update the details of this transfer." : "Move funds between accounts — with live exchange rates for currency conversion."}
       />
 
       {accountsError && (
@@ -485,7 +528,7 @@ export default function TransferPage() {
             <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
               <div className="border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  New transfer
+                  {editingTxn ? "Edit transfer" : "New transfer"}
                 </h2>
               </div>
               <form onSubmit={handleSubmit} className="space-y-4 p-5">
@@ -745,7 +788,7 @@ export default function TransferPage() {
                     disabled={submitting || sameAccount}
                     className="flex-1"
                   >
-                    {submitting ? "Processing…" : "Transfer"}
+                    {submitting ? "Processing…" : editingTxn ? "Update transfer" : "Transfer"}
                   </Button>
                   <Button
                     type="button"
@@ -823,15 +866,32 @@ export default function TransferPage() {
                                   : ""}
                               </p>
                             </div>
-                            <div className="text-right">
-                              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                                {formatCurrency(t.amount, t.currency)}
-                              </p>
-                              {showConverted && (
-                                <p className="text-xs text-blue-600 dark:text-blue-400">
-                                  → {formatCurrency(t.transfer_to_amount!, toCurrency)}
+                            <div className="flex items-center gap-2">
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                  {formatCurrency(t.amount, t.currency)}
                                 </p>
-                              )}
+                                {showConverted && (
+                                  <p className="text-xs text-blue-600 dark:text-blue-400">
+                                    → {formatCurrency(t.transfer_to_amount!, toCurrency)}
+                                  </p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  router.push(`/transfer?edit=${t.id}`);
+                                  // Reload to populate form
+                                  setTimeout(() => window.location.reload(), 50);
+                                }}
+                                className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                                aria-label="Edit transfer"
+                                title="Edit"
+                              >
+                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                                </svg>
+                              </button>
                             </div>
                           </div>
                         </li>
