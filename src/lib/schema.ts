@@ -136,9 +136,13 @@ export const transactionTypeSchema = z.enum([
 ]) satisfies z.ZodType<TransactionType>;
 
 export const exchangeRateSourceSchema = z
-  .enum(["frankfurter", "manual"])
-  .nullable()
-  .default(null) satisfies z.ZodType<ExchangeRateSource | null>;
+  .preprocess(
+    (val) => {
+      if (val === "frankfurter" || val === "manual") return val;
+      return null;
+    },
+    z.enum(["frankfurter", "manual"]).nullable().default(null),
+  ) satisfies z.ZodType<ExchangeRateSource | null>;
 
 export const budgetPeriodSchema = z
   .enum(["monthly"])
