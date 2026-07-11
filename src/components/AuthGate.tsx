@@ -9,6 +9,8 @@ interface AuthState {
   status: "checking" | "authenticated" | "needs_consent" | "error";
   email?: string | null;
   error?: string;
+  /** Whether re-granting consent is needed (invalid_grant, etc.) */
+  needsReconnect?: boolean;
 }
 
 /**
@@ -38,7 +40,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   // avoids a cascading render and satisfies react-hooks/set-state-in-effect.
   const [state, setState] = useState<AuthState>(() =>
     authError
-      ? { status: "error", error: decodeAuthError(authError) }
+      ? { status: "error", ...decodeAuthError(authError) }
       : { status: "checking" },
   );
 
@@ -136,18 +138,31 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             Authentication required
           </h1>
           <p className={cn("mt-2 text-sm text-gray-500")}>{state.error}</p>
-          <button
-            type="button"
-            onClick={() => {
-              // Clear the auth_error param and retry the consent flow.
-              router.replace("/");
-              // Hard reload to retrigger the effect after the param is gone.
-              setTimeout(() => window.location.reload(), 50);
-            }}
-            className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
-          >
-            Try again
-          </button>
+          {state.needsReconnect ? (
+            <button
+              type="button"
+              onClick={() => {
+                // Force consent flow so user re-grants Drive access
+                window.location.href = "/api/auth/login?force_consent=true";
+              }}
+              className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+            >
+              Reconnect Google Drive
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                // Clear the auth_error param and retry the consent flow.
+                router.replace("/");
+                // Hard reload to retrigger the effect after the param is gone.
+                setTimeout(() => window.location.reload(), 50);
+              }}
+              className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+            >
+              Try again
+            </button>
+          )}
         </div>
       </div>
     );
@@ -157,18 +172,23 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/** Map the short error codes from the OAuth callback to a human message. */
-function decodeAuthError(code: string): string {
+/** Map the short error codes from the OAuth callback to a human message + flags. */
+function decodeAuthError(code: string): { error: string; needsReconnect?: boolean } {
   switch (code) {
     case "no_code":
-      return "Google did not return an authorization code. Please try again.";
+      return { error: "Google did not return an authorization code. Please try again." };
     case "token_exchange":
-      return "We couldn't complete the sign-in with Google. Please try again.";
+      return { error: "We couldn't complete the sign-in with Google. Please try again." };
     case "no_refresh_token":
-      return "Google didn't grant a refresh token. You may need to revoke access in your Google account and try again.";
+      return { error: "Google didn't grant a refresh token. You may need to revoke access in your Google account and try again." };
     case "consent_required":
-      return "Google Drive access needs your explicit consent. Click try again to approve.";
+      return { error: "Google Drive access needs your explicit consent. Click try again to approve." };
+    case "invalid_grant":
+      return {
+        error: "Your Google Drive authorization has expired or been revoked. Please reconnect to continue.",
+        needsReconnect: true,
+      };
     default:
-      return decodeURIComponent(code);
+      return { error: decodeURIComponent(code) };
   }
 }
