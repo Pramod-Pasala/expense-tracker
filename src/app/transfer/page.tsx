@@ -192,8 +192,8 @@ export default function TransferPage() {
             if (txn.transfer_fee) setTransferFee(String(txn.transfer_fee));
             if (txn.exchange_rate && txn.exchange_rate !== 1) {
               setUseCustomRate(true);
-              // Custom rate is stored as from→to, but UI shows 1 toCur = ? fromCur
-              setCustomRate(txn.exchange_rate ? String(1 / txn.exchange_rate) : "");
+              // Stored rate is from→to, which is what the UI now expects directly
+              setCustomRate(String(txn.exchange_rate));
             }
           }
         } catch {
@@ -295,10 +295,8 @@ export default function TransferPage() {
   const effectiveRate = useMemo(() => {
     if (!differentCurrencies) return 1;
     if (useCustomRate) {
-      // Custom rate is entered as "1 toCur = X fromCur", so the
-      // from→to conversion rate is 1/X.
-      const r = parseAmount(customRate);
-      return r > 0 ? 1 / r : 0;
+      // Custom rate is entered as "1 fromCur = X toCur" — same direction as API rate.
+      return parseAmount(customRate);
     }
     return rateData?.rate ?? 0;
   }, [differentCurrencies, useCustomRate, customRate, rateData]);
@@ -356,8 +354,7 @@ export default function TransferPage() {
         }
         if (differentCurrencies) {
           if (useCustomRate) {
-            const customR = parseAmount(customRate);
-            body.exchange_rate = customR > 0 ? 1 / customR : 0;
+            body.exchange_rate = parseAmount(customRate);
             body.exchange_rate_source = "manual";
           } else if (rateData) {
             body.exchange_rate = rateData.rate;
@@ -636,7 +633,7 @@ export default function TransferPage() {
                     {useCustomRate ? (
                       <div className="mt-3">
                         <Label htmlFor="custom_rate">
-                          Custom rate (1 {toCur} = ? {fromCur})
+                          Custom rate (1 {fromCur} = ? {toCur})
                         </Label>
                         <TextInput
                           id="custom_rate"
@@ -650,8 +647,8 @@ export default function TransferPage() {
                           disabled={submitting}
                         />
                         <p className="mt-1 text-xs text-zinc-400">
-                          Enter how much {fromCur} equals 1 {toCur}.
-                          Converted amount: {formatCurrency(parseAmount(amount) / (parseAmount(customRate) || 1), toCur!)}
+                          Enter how much {toCur} equals 1 {fromCur}.
+                          Converted amount: {formatCurrency(parseAmount(amount) * (parseAmount(customRate) || 0), toCur!)}
                         </p>
                       </div>
                     ) : (
@@ -688,7 +685,7 @@ export default function TransferPage() {
                         {rateData && !rateLoading && (
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                             <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                              1 {toCur} = {formatRate(1 / rateData.rate)} {fromCur}
+                              1 {fromCur} = {formatRate(rateData.rate)} {toCur}
                             </span>
                             <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs capitalize text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
                               {rateData.source}
