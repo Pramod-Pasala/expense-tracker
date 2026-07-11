@@ -39,10 +39,76 @@ const PRESET_COLORS = [
 ];
 
 const CATEGORY_EMOJIS = [
-  "🏷️", "📦", "🍔", "☕", "🛒", "🏠", "🚗", "⛽",
-  "💡", "📱", "💊", "🎓", "✈️", "🏨", "🎬", "🎮",
-  "👕", "💪", "🎁", "💰", "💵", "💳", "🏦", "📈",
-  "💻", "🔧", "🐾", "🌱", "📚", "🎨", "🚌", "🚆",
+  { emoji: "🏷️", name: "tag label" },
+  { emoji: "📦", name: "box package shipping" },
+  { emoji: "🍔", name: "burger food fast food" },
+  { emoji: "☕", name: "coffee drink cafe" },
+  { emoji: "🛒", name: "cart shopping groceries" },
+  { emoji: "🏠", name: "house home rent mortgage" },
+  { emoji: "🚗", name: "car auto vehicle transport" },
+  { emoji: "⛽", name: "fuel gas petrol" },
+  { emoji: "💡", name: "light electricity idea bulb" },
+  { emoji: "📱", name: "phone mobile cell" },
+  { emoji: "💊", name: "pill medicine health pharmacy" },
+  { emoji: "🎓", name: "graduation education school university" },
+  { emoji: "✈️", name: "plane flight travel air" },
+  { emoji: "🏨", name: "hotel accommodation stay" },
+  { emoji: "🎬", name: "movie cinema film entertainment" },
+  { emoji: "🎮", name: "game gaming controller play" },
+  { emoji: "👕", name: "shirt clothes fashion clothing" },
+  { emoji: "💪", name: "gym fitness workout muscle" },
+  { emoji: "🎁", name: "gift present birthday" },
+  { emoji: "💰", name: "money cash savings" },
+  { emoji: "💵", name: "dollar bill cash money" },
+  { emoji: "💳", name: "card credit debit" },
+  { emoji: "🏦", name: "bank finance" },
+  { emoji: "📈", name: "chart graph invest stock" },
+  { emoji: "💻", name: "laptop computer tech" },
+  { emoji: "🔧", name: "tools repair fix wrench" },
+  { emoji: "🐾", name: "pet animal dog cat" },
+  { emoji: "🌱", name: "plant nature garden" },
+  { emoji: "📚", name: "books library reading study" },
+  { emoji: "🎨", name: "art paint creative" },
+  { emoji: "🚌", name: "bus transport public" },
+  { emoji: "🚆", name: "train rail transport" },
+  { emoji: "🍽️", name: "restaurant dining food" },
+  { emoji: "🛡️", name: "insurance shield protection" },
+  { emoji: "Taxi", name: "taxi cab ride" },
+  { emoji: "🧾", name: "receipt bill invoice" },
+  { emoji: "🍷", name: "wine drink alcohol bar" },
+  { emoji: "🚌", name: "bus transit" },
+  { emoji: "🚕", name: "taxi cab" },
+  { emoji: "💈", name: "barber haircut salon" },
+  { emoji: "🧹", name: "cleaning" },
+  { emoji: "🪑", name: "furniture home decor" },
+  { emoji: "🔌", name: "electronics cable charger" },
+  { emoji: "🛞", name: "tire wheel car repair" },
+  { emoji: "🎵", name: "music song audio" },
+  { emoji: "📝", name: "notes write journal" },
+  { emoji: "🌍", name: "travel world globe" },
+  { emoji: "❤️", name: "health love care" },
+  { emoji: "🏥", name: "hospital medical doctor" },
+  { emoji: "🦷", name: "dentist teeth" },
+  { emoji: "👁️", name: "eye optician vision" },
+  { emoji: "🧴", name: "toiletries shampoo" },
+  { emoji: "🛏️", name: "bed sleep furniture" },
+  { emoji: "🍳", name: "cooking kitchen breakfast" },
+  { emoji: "🧊", name: "groceries frozen" },
+  { emoji: "🚿", name: "utilities water shower" },
+  { emoji: "🔋", name: "battery power energy" },
+  { emoji: "📧", name: "email communication" },
+  { emoji: "🌐", name: "internet web online" },
+  { emoji: "🗂️", name: "files documents folder" },
+  { emoji: "🎯", name: "goal target budget" },
+  { emoji: "🪙", name: "coin money savings" },
+  { emoji: "💎", name: "luxury jewelry valuable" },
+  { emoji: "🛋️", name: "sofa couch living" },
+  { emoji: "🪟", name: "window home" },
+  { emoji: "🧑‍💻", name: "freelance work remote" },
+  { emoji: "🏦", name: "bank salary" },
+  { emoji: "🎁", name: "donation charity gift" },
+  { emoji: "💵", name: "refund cashback" },
+  { emoji: "📈", name: "dividend interest" },
 ];
 
 function typeLabel(t: CategoryType) {
@@ -91,13 +157,21 @@ function CategoryFormModal({
   const [values, setValues] = useState<CategoryFormValues>(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [prevOpen, setPrevOpen] = useState(open);
+  const [iconSearch, setIconSearch] = useState("");
   if (open !== prevOpen) {
     setPrevOpen(open);
     if (open) {
       setValues(initial ?? emptyForm);
       setError(null);
+      setIconSearch("");
     }
   }
+
+  const filteredEmojis = useMemo(() => {
+    const q = iconSearch.trim().toLowerCase();
+    if (!q) return CATEGORY_EMOJIS;
+    return CATEGORY_EMOJIS.filter((item) => item.name.includes(q));
+  }, [iconSearch]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,23 +200,34 @@ function CategoryFormModal({
 
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-gray-700">Icon</label>
-          <div className="flex flex-wrap items-center gap-2">
-            {CATEGORY_EMOJIS.map((emoji) => (
+          <input
+            type="text"
+            placeholder="Search icons…"
+            value={iconSearch}
+            onChange={(e) => setIconSearch(e.target.value)}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+          />
+          <div className="flex flex-wrap items-center gap-2 max-h-40 overflow-y-auto">
+            {filteredEmojis.map((item) => (
               <button
-                key={emoji}
+                key={item.emoji + item.name}
                 type="button"
-                onClick={() => setValues((v) => ({ ...v, icon: emoji }))}
+                title={item.name}
+                onClick={() => setValues((v) => ({ ...v, icon: item.emoji }))}
                 className={cn(
                   "flex h-9 w-9 items-center justify-center rounded-lg border-2 text-lg transition-transform hover:scale-110",
-                  values.icon === emoji
+                  values.icon === item.emoji
                     ? "border-gray-900 ring-2 ring-offset-2"
                     : "border-transparent bg-gray-50",
                 )}
-                aria-label={`Select icon ${emoji}`}
+                aria-label={`Select icon ${item.name}`}
               >
-                {emoji}
+                {item.emoji}
               </button>
             ))}
+            {filteredEmojis.length === 0 && (
+              <span className="text-xs text-gray-400">No matching icons</span>
+            )}
             <input
               type="text"
               value={values.icon}

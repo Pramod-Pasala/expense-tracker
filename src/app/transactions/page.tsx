@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type {
   Account,
   Category,
@@ -106,6 +107,7 @@ function TransactionFormModal({
   accounts,
   categories,
   existingTags,
+  isTransfer,
 }: {
   open: boolean;
   onClose: () => void;
@@ -115,6 +117,9 @@ function TransactionFormModal({
   accounts: Account[];
   categories: Category[];
   existingTags: string[];
+  /** When true, the transaction being edited is a transfer — show a notice
+   *  instead of the expense/income form (transfers are edited elsewhere). */
+  isTransfer?: boolean;
 }) {
   const [values, setValues] = useState<TxnFormValues>(() =>
     emptyTxnForm(accounts[0]?.id ?? ""),
@@ -202,6 +207,25 @@ function TransactionFormModal({
       onClose={onClose}
       title={initial ? "Edit transaction" : "Add transaction"}
     >
+      {isTransfer ? (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+            <p className="font-medium">
+              This is a transfer transaction.
+            </p>
+            <p className="mt-1">
+              Transfer transactions can&apos;t be edited here. Please use the
+              Transfer page to make changes.
+            </p>
+          </div>
+          <Link
+            href="/transfer"
+            className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+          >
+            Go to Transfer page →
+          </Link>
+        </div>
+      ) : (
       <form onSubmit={submit} className="space-y-4">
         {/* Type toggle */}
         <div className="flex gap-2">
@@ -339,6 +363,7 @@ function TransactionFormModal({
           </Button>
         </div>
       </form>
+      )}
     </Modal>
   );
 }

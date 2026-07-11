@@ -109,6 +109,9 @@ export default function TransferPage() {
   const [recent, setRecent] = useState<Transaction[]>([]);
   const [recentLoading, setRecentLoading] = useState(true);
 
+  // --- existing tags for autocomplete ---------------------------------------
+  const [existingTags, setExistingTags] = useState<string[]>([]);
+
   /* ------------------------------------------------------------------------ */
   /*  Fetch accounts + recent transfers on mount                               */
   /* ------------------------------------------------------------------------ */
@@ -141,6 +144,26 @@ export default function TransferPage() {
         // non-fatal
       } finally {
         if (!cancelled) setRecentLoading(false);
+      }
+    })();
+
+    // Fetch all transactions to extract existing tags for autocomplete
+    (async () => {
+      try {
+        const res = await fetch("/api/transactions");
+        if (!res.ok) return;
+        const data: RecentTransfersResponse = await res.json();
+        if (cancelled) return;
+        const tagSet = new Set<string>();
+        for (const t of data.transactions || []) {
+          for (const tag of t.tags ?? []) {
+            const trimmed = tag.trim();
+            if (trimmed) tagSet.add(trimmed);
+          }
+        }
+        setExistingTags(Array.from(tagSet).sort((a, b) => a.localeCompare(b)));
+      } catch {
+        // non-fatal
       }
     })();
 
@@ -682,6 +705,32 @@ export default function TransferPage() {
                     onChange={(e) => setTagsInput(e.target.value)}
                     disabled={submitting}
                   />
+                  {(() => {
+                    const currentTags = tagsInput.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+                    const typingFragment = (tagsInput.split(",").pop() ?? "").trim().toLowerCase();
+                    let pool = existingTags.filter((t) => !currentTags.includes(t.toLowerCase()));
+                    if (typingFragment) pool = pool.filter((t) => t.toLowerCase().startsWith(typingFragment));
+                    const suggestions = pool.slice(0, 12);
+                    if (suggestions.length === 0) return null;
+                    return (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {suggestions.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => {
+                              const parts = tagsInput.split(",");
+                              parts[parts.length - 1] = tag;
+                              setTagsInput(parts.map((p) => p.trim()).filter((p, i) => p !== "" || i === 0).join(", "));
+                            }}
+                            className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+                          >
+                            #{tag}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {submitError && (
