@@ -14,7 +14,7 @@ import {
   Select,
   TextArea,
   TextInput,
-} from "@/components/ui";
+, DateInput} from "@/components/ui";
 
 /* -------------------------------------------------------------------------- */
 /*  Types                                                                      */
@@ -602,12 +602,10 @@ export default function TransferPage() {
                   </div>
                   <div>
                     <Label htmlFor="date">Date</Label>
-                    <TextInput
+                    <DateInput
                       id="date"
-                      type="date"
-                      lang="de"
                       value={date}
-                      onChange={(e) => setDate(e.target.value)}
+                      onChange={setDate}
                       disabled={submitting}
                     />
                   </div>

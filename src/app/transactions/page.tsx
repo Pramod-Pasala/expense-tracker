@@ -366,12 +366,10 @@ function TransactionFormModal({
           </Select>
         </div>
 
-        <Input
+        <DateInput
           label="Date"
-          type="date"
-          lang="de"
           value={values.date}
-          onChange={(e) => setValues((v) => ({ ...v, date: e.target.value }))}
+          onChange={(iso) => setValues((v) => ({ ...v, date: iso }))}
         />
 
         <div className="flex flex-col gap-1.5">
@@ -759,19 +757,15 @@ export default function TransactionsPage() {
             <option value="expense">Expense</option>
             <option value="transfer">Transfer</option>
           </Select>
-          <Input
+          <DateInput
             label="From date"
-            type="date"
-            lang="de"
             value={filterStart}
-            onChange={(e) => setFilterStart(e.target.value)}
+            onChange={setFilterStart}
           />
-          <Input
+          <DateInput
             label="To date"
-            type="date"
-            lang="de"
             value={filterEnd}
-            onChange={(e) => setFilterEnd(e.target.value)}
+            onChange={setFilterEnd}
           />
         </div>
         {hasFilters && (

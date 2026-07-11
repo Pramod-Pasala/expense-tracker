@@ -9,7 +9,7 @@ import {
   LoadingState,
   PageHeader,
   TextInput,
-} from "@/components/ui";
+, DateInput} from "@/components/ui";
 import {
   CashflowChart,
   ExpenseByCategoryChart,
@@ -194,23 +194,19 @@ export default function ReportsPage() {
           <div className="mt-4 grid gap-3 sm:max-w-md sm:grid-cols-2">
             <div>
               <Label htmlFor="start_date">From</Label>
-              <TextInput
+              <DateInput
                 id="start_date"
-                type="date"
-                lang="de"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={setStartDate}
                 max={endDate}
               />
             </div>
             <div>
               <Label htmlFor="end_date">To</Label>
-              <TextInput
+              <DateInput
                 id="end_date"
-                type="date"
-                lang="de"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={setEndDate}
                 min={startDate}
               />
             </div>
