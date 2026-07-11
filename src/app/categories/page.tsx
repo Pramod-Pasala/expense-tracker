@@ -159,12 +159,14 @@ function CategoryFormModal({
   const [prevOpen, setPrevOpen] = useState(open);
   const [onlineEmojis, setOnlineEmojis] = useState<{ emoji: string; name: string }[]>([]);
   const [searchingOnline, setSearchingOnline] = useState(false);
+  const [searchedOnline, setSearchedOnline] = useState(false);
   if (open !== prevOpen) {
     setPrevOpen(open);
     if (open) {
       setValues(initial ?? emptyForm);
       setError(null);
       setOnlineEmojis([]);
+      setSearchedOnline(false);
     }
   }
 
@@ -183,6 +185,7 @@ function CategoryFormModal({
     const q = values.name.trim();
     if (!q) return;
     setSearchingOnline(true);
+    setSearchedOnline(true);
     try {
       // Use the free emoji API (no key required)
       const res = await fetch(
@@ -260,6 +263,12 @@ function CategoryFormModal({
           </div>
 
           {/* Online search results */}
+          {searchingOnline && (
+            <p className="text-xs text-gray-400">Searching the web…</p>
+          )}
+          {searchedOnline && !searchingOnline && onlineEmojis.length === 0 && (
+            <p className="text-xs text-gray-400">No results found for "{values.name.trim()}"</p>
+          )}
           {onlineEmojis.length > 0 && (
             <>
               <p className="text-xs text-gray-400">From the web:</p>

@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
         exchange_rate_date: null,
         transfer_fee: null,
         transfer_fee_account_id: null,
-        metadata: {},
+        metadata: { parent_transfer_id: newTxn.id },
       };
       data.transactions.push(feeTxn);
     }
@@ -340,11 +340,10 @@ export async function PUT(req: NextRequest) {
     existing.transfer_fee = transfer_fee || null;
     existing.transfer_fee_account_id = transfer_fee ? from_account_id : null;
 
-    // Handle fee expense: find old fee txn, delete it, create new one if needed
+    // Handle fee expense: find old fee txn via metadata link, delete it, create new one if needed
     const oldFeeTxn = data.transactions.find(
       (t) => t.type === "expense" && t.tags.includes("TransferFee") &&
-        t.date === existing.date && t.account_id === from_account_id &&
-        t.notes.includes(fromAccount.name) && t.notes.includes(toAccount.name),
+        t.metadata?.parent_transfer_id === id,
     );
     if (oldFeeTxn) {
       data.transactions = data.transactions.filter((t) => t.id !== oldFeeTxn.id);
@@ -372,7 +371,7 @@ export async function PUT(req: NextRequest) {
         exchange_rate_date: null,
         transfer_fee: null,
         transfer_fee_account_id: null,
-        metadata: {},
+        metadata: { parent_transfer_id: id },
       };
       data.transactions.push(feeTxn);
     }

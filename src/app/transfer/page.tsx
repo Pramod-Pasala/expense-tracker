@@ -387,6 +387,17 @@ export default function TransferPage() {
           toCur: toCur!,
           different: !!differentCurrencies,
         });
+
+        // Refresh recent transfers list
+        try {
+          const recentRes = await fetch("/api/transactions?type=transfer&limit=5");
+          if (recentRes.ok) {
+            const recentData = await recentRes.json();
+            setRecent(recentData.transactions || []);
+          }
+        } catch {
+          // non-fatal
+        }
       } catch (err: unknown) {
         setSubmitError(getErrorMessage(err) || "Transfer failed");
       } finally {

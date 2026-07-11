@@ -666,8 +666,15 @@ export default function TransactionsPage() {
         method: "DELETE",
       });
       if (checkAuthExpired(res)) return;
-        if (!res.ok) {
+      if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        // If it's a transfer fee that can't be deleted, show helpful message
+        if (res.status === 400 && body.parent_transfer_id) {
+          setError(
+            "This is a transfer fee and can't be deleted directly. Delete the parent transfer instead.",
+          );
+          return;
+        }
         throw new Error(body.error || "Failed to delete transaction");
       }
       const result = await res.json().catch(() => ({}));
