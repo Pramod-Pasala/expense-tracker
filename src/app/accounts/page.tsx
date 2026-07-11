@@ -46,7 +46,7 @@ interface AccountFormValues {
   name: string;
   type: AccountType;
   currency: string;
-  initial_balance: number;
+  initial_balance: string;
   color: string;
 }
 
@@ -54,7 +54,7 @@ const emptyForm: AccountFormValues = {
   name: "",
   type: "bank",
   currency: "EUR",
-  initial_balance: 0,
+  initial_balance: "",
   color: "#10B981",
 };
 
@@ -140,12 +140,10 @@ function AccountFormModal({
           label="Initial balance"
           type="number"
           step="0.01"
+          placeholder="0.00"
           value={values.initial_balance}
           onChange={(e) =>
-            setValues((v) => ({
-              ...v,
-              initial_balance: parseFloat(e.target.value) || 0,
-            }))
+            setValues((v) => ({ ...v, initial_balance: e.target.value }))
           }
         />
 
@@ -424,7 +422,7 @@ export default function AccountsPage() {
         name: values.name,
         type: values.type,
         currency: values.currency,
-        initial_balance: values.initial_balance,
+        initial_balance: parseFloat(values.initial_balance) || 0,
         color: values.color,
       };
       if (editing) {
@@ -629,7 +627,7 @@ export default function AccountsPage() {
                 name: editing.name,
                 type: editing.type,
                 currency: editing.currency,
-                initial_balance: editing.initial_balance,
+                initial_balance: String(editing.initial_balance),
                 color: editing.color,
               }
             : null

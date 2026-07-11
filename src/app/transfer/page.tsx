@@ -236,7 +236,12 @@ export default function TransferPage() {
   /* ------------------------------------------------------------------------ */
   const effectiveRate = useMemo(() => {
     if (!differentCurrencies) return 1;
-    if (useCustomRate) return parseAmount(customRate) || 0;
+    if (useCustomRate) {
+      // Custom rate is entered as "1 toCur = X fromCur", so the
+      // from→to conversion rate is 1/X.
+      const r = parseAmount(customRate);
+      return r > 0 ? 1 / r : 0;
+    }
     return rateData?.rate ?? 0;
   }, [differentCurrencies, useCustomRate, customRate, rateData]);
 
@@ -293,7 +298,10 @@ export default function TransferPage() {
         }
         if (differentCurrencies) {
           if (useCustomRate) {
-            body.exchange_rate = parseAmount(customRate);
+            // Custom rate is entered as "1 toCur = X fromCur".
+            // API expects from→to rate, so invert it.
+            const customR = parseAmount(customRate);
+            body.exchange_rate = customR > 0 ? 1 / customR : 0;
             body.exchange_rate_source = "manual";
           } else if (rateData) {
             body.exchange_rate = rateData.rate;
@@ -551,7 +559,7 @@ export default function TransferPage() {
                     {useCustomRate ? (
                       <div className="mt-3">
                         <Label htmlFor="custom_rate">
-                          Custom rate (1 {fromCur} = ? {toCur})
+                          Custom rate (1 {toCur} = ? {fromCur})
                         </Label>
                         <TextInput
                           id="custom_rate"
@@ -564,6 +572,10 @@ export default function TransferPage() {
                           onChange={(e) => setCustomRate(e.target.value)}
                           disabled={submitting}
                         />
+                        <p className="mt-1 text-xs text-zinc-400">
+                          Enter how much {fromCur} equals 1 {toCur}.
+                          Converted amount: {formatCurrency(parseAmount(amount) / (parseAmount(customRate) || 1), toCur!)}
+                        </p>
                       </div>
                     ) : (
                       <div className="mt-3 space-y-2">
@@ -599,7 +611,7 @@ export default function TransferPage() {
                         {rateData && !rateLoading && (
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                             <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                              1 {fromCur} = {formatRate(rateData.rate)} {toCur}
+                              1 {toCur} = {formatRate(1 / rateData.rate)} {fromCur}
                             </span>
                             <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs capitalize text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
                               {rateData.source}

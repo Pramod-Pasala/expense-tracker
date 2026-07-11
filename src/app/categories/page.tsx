@@ -38,6 +38,13 @@ const PRESET_COLORS = [
   "#6B7280",
 ];
 
+const CATEGORY_EMOJIS = [
+  "🏷️", "📦", "🍔", "☕", "🛒", "🏠", "🚗", "⛽",
+  "💡", "📱", "💊", "🎓", "✈️", "🏨", "🎬", "🎮",
+  "👕", "💪", "🎁", "💰", "💵", "💳", "🏦", "📈",
+  "💻", "🔧", "🐾", "🌱", "📚", "🎨", "🚌", "🚆",
+];
+
 function typeLabel(t: CategoryType) {
   return CATEGORY_TYPES.find((x) => x.value === t)?.label ?? t;
 }
@@ -54,6 +61,7 @@ interface CategoryFormValues {
   type: CategoryType;
   parent_id: string | null;
   color: string;
+  icon: string;
 }
 
 const emptyForm: CategoryFormValues = {
@@ -61,6 +69,7 @@ const emptyForm: CategoryFormValues = {
   type: "expense",
   parent_id: null,
   color: "#6B7280",
+  icon: "🏷️",
 };
 
 function CategoryFormModal({
@@ -114,6 +123,36 @@ function CategoryFormModal({
           error={!!error && !values.name.trim()}
           autoFocus
         />
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-gray-700">Icon</label>
+          <div className="flex flex-wrap items-center gap-2">
+            {CATEGORY_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => setValues((v) => ({ ...v, icon: emoji }))}
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-lg border-2 text-lg transition-transform hover:scale-110",
+                  values.icon === emoji
+                    ? "border-gray-900 ring-2 ring-offset-2"
+                    : "border-transparent bg-gray-50",
+                )}
+                aria-label={`Select icon ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+            <input
+              type="text"
+              value={values.icon}
+              onChange={(e) => setValues((v) => ({ ...v, icon: e.target.value }))}
+              className="h-9 w-14 rounded-lg border border-gray-200 px-2 text-center text-lg"
+              maxLength={4}
+              aria-label="Custom icon"
+            />
+          </div>
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <Select
@@ -389,6 +428,7 @@ export default function CategoriesPage() {
         type: values.type,
         parent_id: values.parent_id,
         color: values.color,
+        icon: values.icon,
       };
       if (editing) {
         const res = await fetch(`/api/categories/${editing.id}`, {
@@ -611,6 +651,7 @@ export default function CategoriesPage() {
                 type: editing.type,
                 parent_id: editing.parent_id,
                 color: editing.color,
+                icon: editing.icon,
               }
             : null
         }

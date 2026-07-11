@@ -35,8 +35,11 @@ export default function Nav({ email }: NavProps) {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
-      // Hard reload to clear any cached client state.
-      window.location.href = "/";
+      // Clear any cached client state, then redirect to CF Access logout
+      // so the user is fully signed out (not silently re-authenticated).
+      const cfTeam = "ppramod";
+      const returnTo = window.location.origin;
+      window.location.href = `https://${cfTeam}.cloudflareaccess.com/cdn-cgi/access/logout?returnTo=${encodeURIComponent(returnTo)}`;
     }
   }
 
@@ -118,6 +121,17 @@ export default function Nav({ email }: NavProps) {
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium text-gray-500 transition-colors hover:text-gray-700"
+        >
+          <span className="text-gray-400">
+            <LogoutIcon />
+          </span>
+          {loggingOut ? "…" : "Sign out"}
+        </button>
       </nav>
     </>
   );
