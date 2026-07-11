@@ -197,6 +197,7 @@ export default function ReportsPage() {
               <TextInput
                 id="start_date"
                 type="date"
+                lang="de"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 max={endDate}
@@ -207,6 +208,7 @@ export default function ReportsPage() {
               <TextInput
                 id="end_date"
                 type="date"
+                lang="de"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 min={startDate}

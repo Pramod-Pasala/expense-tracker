@@ -369,6 +369,7 @@ function TransactionFormModal({
         <Input
           label="Date"
           type="date"
+          lang="de"
           value={values.date}
           onChange={(e) => setValues((v) => ({ ...v, date: e.target.value }))}
         />
@@ -761,12 +762,14 @@ export default function TransactionsPage() {
           <Input
             label="From date"
             type="date"
+            lang="de"
             value={filterStart}
             onChange={(e) => setFilterStart(e.target.value)}
           />
           <Input
             label="To date"
             type="date"
+            lang="de"
             value={filterEnd}
             onChange={(e) => setFilterEnd(e.target.value)}
           />

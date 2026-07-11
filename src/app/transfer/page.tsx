@@ -605,6 +605,7 @@ export default function TransferPage() {
                     <TextInput
                       id="date"
                       type="date"
+                      lang="de"
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       disabled={submitting}
