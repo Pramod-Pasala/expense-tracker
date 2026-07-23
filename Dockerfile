@@ -35,6 +35,11 @@ COPY . .
 ENV NODE_ENV=production
 ENV PORT=8084
 
+# NEXT_PUBLIC_ vars must be present at build time for Next.js to inline them
+# Sentry DSN is public by design (visible in client-side code)
+ARG NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+
 # Build the Next.js application (standalone output is configured in next.config.ts)
 RUN npm run build
 

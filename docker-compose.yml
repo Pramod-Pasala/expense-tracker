@@ -1,7 +1,10 @@
 services:
   expense-tracker:
     container_name: expense-tracker
-    build: .
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
     ports:
       - "8084:8084"
     restart: unless-stopped
