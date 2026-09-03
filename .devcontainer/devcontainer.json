@@ -1,0 +1,27 @@
+{
+  "name": "expense-tracker",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:20-bookworm",
+  "forwardPorts": [3000, 8084],
+  "portsAttributes": {
+    "3000": { "label": "Next.js dev server" },
+    "8084": { "label": "App (standalone/prod)" }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "version": "latest"
+    }
+  },
+  "onCreateCommand": "npm ci",
+  "postStartCommand": "git config user.name \"P Pramod\" && git config user.email \"pramodpasala00@gmail.com\"",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.vscode-typescript-next"
+      ]
+    }
+  },
+  "remoteUser": "node"
+}
